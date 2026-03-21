@@ -29,7 +29,7 @@ Bioturbtop = 10;%5; %cm2/yr bioturbation coefficient at top
 Bioturbbottom = 1; %cm2/yr bioturbation coefficient at bottom
 bioturbscale = 3; %cm - depth scale for decrease in bioturbation
 
-vbottom = 10; %cm/year
+vbottom = 100; %cm/year
 
 vbottom_fluid = 0;%0.1; %cm/year
 porosbottom = 0.7; %porosity
@@ -59,9 +59,9 @@ Calcium_activity = 0.6;%0.2; % calcium concentration
 CO3_activity = 0.6;%0.028; % calcium concentration
 
 
-O2init = 200; % uM - O2 concentration at SWI
+O2init = 350; % uM - O2 concentration at SWI
 
-SO4init = 3000; %XL28000; % uM - SO4 concentration at SWI
+SO4init = 500; %XL28000; % uM - SO4 concentration at SWI
 
 Pinitial = 0; % uM - PO4 concentration at SWI
 Feinit = 0;  % uM - Fe concentration at SWI
@@ -74,10 +74,10 @@ k_calcite = 1;%1E-6;%1000; %umol/l/year
 Mineral_Mass = 215; %basalt 215, albite 260, forsterite 140 MgO 40
 
 
-DICinit = 3000;     % [DIC] [umol/kg]
+DICinit = 1000;     % [DIC] [umol/kg]
 
 
-HCO3init = 3200; 
+HCO3init = 950; 
 
 
 CH4init = 0;      % [CH4] at SWI uM
@@ -89,7 +89,7 @@ k_aerobic_CH4 = 1; % aerobic methane oxidation rate constant (1/year)
 Sed_rate = 1;  %sediment accumulation rate (gram/cm2/year)
 BE = 0.2; %0.1;     % burial efficiency of organic from the water column model
 
-NPP = 150; %200      % Net Primary Production (gram/m2/year)
+NPP = 10; %200      % Net Primary Production (gram/m2/year)
 
 F_FeOx = 10;   %mmol/m2/d
 kFeOx = 10; %100; % 1/umol/l/year
@@ -876,7 +876,7 @@ box on
 
 subplot(m_plot,n_plot,17);
 
-plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
+plot(FeooH(end,:),z_sed,'lineWidth',2); axis ij
 title('Fe(III) (\mumol/gr)')
 
 box on

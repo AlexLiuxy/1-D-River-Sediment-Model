@@ -7,7 +7,7 @@ global DHCO3 RC R_SRR kFeS C_Fe C_HS Alpha_Bioirrig DICinit HCO3init
 global v_burial_Fluid v_burial z_sed poros rho 
 global k_calcite k_calcite_dis1 k_calcite_dis2 n_power_CaCO31 n_power_CaCO32 n_power_CaCO33
 global Calcium Calcium_activity CO3_activity Ksp_ca
-global Rate_Meth
+global Rate_Meth T_future
 
     
     v_burial_f = double(interp1(z_sed, v_burial_Fluid, x));
@@ -26,7 +26,7 @@ global Rate_Meth
     CaCO3 = max(real(Y(5)), 0);
 
     % calculate real time CO3
-    [~, CO3_current, ~] = River_Carbonate(ALK, DIC, 20, 0.1, 1); 
+    [~, CO3_current, ~] = River_Carbonate(ALK, DIC, T_future, 0.1, 1); 
 
     if isempty(CO3_current) || isnan(CO3_current)
         CO3_current = 1e-12;
