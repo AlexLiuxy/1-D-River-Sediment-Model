@@ -29,7 +29,7 @@ Bioturbtop = 10;%5; %cm2/yr bioturbation coefficient at top
 Bioturbbottom = 1; %cm2/yr bioturbation coefficient at bottom
 bioturbscale = 3; %cm - depth scale for decrease in bioturbation
 
-vbottom = 10; %cm/year
+vbottom = 1; %cm/year
 
 vbottom_fluid = 0;%0.1; %cm/year
 porosbottom = 0.7; %porosity
@@ -59,9 +59,9 @@ Calcium_activity = 0.6;%0.2; % calcium concentration
 CO3_activity = 0.6;%0.028; % calcium concentration
 
 
-O2init = 200; % uM - O2 concentration at SWI
+O2init = 50; % uM - O2 concentration at SWI
 
-SO4init = 3000; %XL28000; % uM - SO4 concentration at SWI
+SO4init = 200; %XL28000; % uM - SO4 concentration at SWI
 
 Pinitial = 0; % uM - PO4 concentration at SWI
 Feinit = 0;  % uM - Fe concentration at SWI
@@ -74,24 +74,30 @@ k_calcite = 1;%1E-6;%1000; %umol/l/year
 Mineral_Mass = 215; %basalt 215, albite 260, forsterite 140 MgO 40
 
 
-DICinit = 3000;     % [DIC] [umol/kg]
+DICinit = 1000;     % [DIC] [umol/kg]
 
 
-HCO3init = 3200; 
+HCO3init = 950; 
 
 
 CH4init = 0;      % [CH4] at SWI uM
 P_C_ratio = 0.0094;
 K_CH4_SO4 = 100; % AOM with sulfate half saturation (uM)
 K_CH4_O2 = 1; % Aerobic methane oxidation half saturation (uM)
-k_AOM = 0.1; % AOM rate constant (1/year)
-k_aerobic_CH4 = 1; % aerobic methane oxidation rate constant (1/year)
+
+k_AOM = 100; % AOM rate constant (1/year)
+
+k_aerobic_CH4 = 100; % aerobic methane oxidation rate constant (1/year)
+
+
 Sed_rate = 1;  %sediment accumulation rate (gram/cm2/year)
 BE = 0.2; %0.1;     % burial efficiency of organic from the water column model
 
-NPP = 150; %200      % Net Primary Production (gram/m2/year)
+NPP = 800; %200      % Net Primary Production (gram/m2/year)
 
-F_FeOx = 10;   %mmol/m2/d
+F_FeOx = 100;   %mmol/m2/d
+
+
 kFeOx = 10; %100; % 1/umol/l/year
 kFeS = 10;%10;%0.1;%0.01;%0.08;%0.2;
 kapatite = 0.05; %0.01-0.1 1/year
@@ -114,7 +120,7 @@ k_calcite_dis1 = 0.005;
 k_calcite_dis2 = 10;
 Q10 = 2; 
 T_ref = 25;
-T_future = 20;
+T_future = 30;
 
 DOC_root_1 = 0; %500;%50;%500;;%1000;    % DOC flux release in seagrass root zone (mmol/m2/day; Eldridge & MorserMarine 2000)
 O2_root_1  = 0; %500;%2;%100;%500;   % O2 flux release in seagrass root zone (mmol/m2/day; Eldridge & MorserMarine 2000)
@@ -142,8 +148,13 @@ Bioturb = interp1(z_biodiff,Bioturb_1,z_sed);
 Alpha_Bioirrig = Bioirrig_bottom + (Bioirrig_top-Bioirrig_bottom)*exp(-z_sed/Bioirrig_scale);
 v_burial = vbottom*(1-porosbottom)./(1-poros); %cm/year
 v_burial_Fluid = vbottom_fluid*(1+porosbottom)./(1+poros); %cm/year
+
+
 age = ageinit + cumsum(dz_sed./v_burial);
 k_sed = 10.^(-0.95*log10(age) - 0.81);
+
+
+
 Temp_factor = Q10.^((T_future - T_ref)/10);
 
 % ----------------------- Initial Carbonate concentration -----------------
@@ -257,6 +268,7 @@ b_anoxic = 0.95;%0.857;
 a_anoxic = 0.81;%1.1;
 k_sed(1,1:num_OPD) = 10.^(-b_oxic*log10(age(1,1:num_OPD)) - a_oxic);  % Oxic
 k_sed(1,(num_OPD+1):n) = 10.^(-b_anoxic*log10(age(1,(num_OPD+1):n)) - a_anoxic);  % Anoxic
+
 
 % ------------------- Blue Carbon ------------------------------------
 
@@ -691,7 +703,7 @@ F_diff_CH4 = DCH4.*((CH4(1,2) - CH4(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 % -------------------------------------------------------------------------
 % ----------------------------- PLOTS -------------------------------------
-
+clf;
 n_plot = 6; % number of plots in each row
 m_plot = 3; % number of total rows
 
@@ -873,6 +885,9 @@ plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
 title('Calciite saturation (\Omega - 1)')
 
 box on
+grid on
+
+ax.LineWidth = 2;
 
 subplot(m_plot,n_plot,17);
 
@@ -880,7 +895,9 @@ plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
 title('Fe(III) (\mumol/gr)')
 
 box on
+grid on
 
+ax.LineWidth = 2;
 
 % Mineral saturation indices
 
