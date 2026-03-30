@@ -11,21 +11,7 @@ clear all
 tic
 
 
-function Outputs = Run_RTM_1D(Config, Params, Hydro)
-% RUN_RTM_1D_OLDCORE
-% Black-box wrapper around the OLD sequential sediment RTM core.
-%
-% Inputs:
-%   Config  - site/scenario settings
-%   Params  - static constants
-%   Hydro   - output from Hydro_Preprocessor
-%
-% Outputs:
-%   Outputs.MethDepth
-%   Outputs.IntMethRate
-%   Outputs.SigmaCarb_top
-%   Outputs.SigmaCarb_bioturb_mean
-%   Outputs.profiles   (optional diagnostics)
+
 % ----------------------------- INPUT PARAMETERS ---------------------------
 
 global v_burial Mineral_Mass z_sed KFe_HS Oxygen Sulfate
@@ -36,112 +22,112 @@ global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit Iron_C
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor T_future
 
-Bioirrig_top = 100;%80; %1/yr
-Bioirrig_bottom = 0; %1/yr
-Bioirrig_scale = 0.75; %1/yr
-Lbottom = 30; %cm  ''Maximum depth''
-t_final = 100; %year  ''Target Year''
-Bioturbtop = 10;%5; %cm2/yr bioturbation coefficient at top
-Bioturbbottom = 1; %cm2/yr bioturbation coefficient at bottom
-bioturbscale = 3; %cm - depth scale for decrease in bioturbation
+    Params = Params_Static();
+    Config = Config_Baseline();
+    Hydro  = Hydro_Preprocessor(Config, Params);
 
-vbottom = 1; %cm/year
+    rho = Params.rho;
+    Mineral_Mass = 215;   % keep as legacy until explicitly audited
 
-vbottom_fluid = 0;%0.1; %cm/year
-porosbottom = 0.7; %porosity
-porostop = 0.9; 
-rho = 2.73; %gram/dDw
-porosscale = 3; %cm - depth scsale for decrease in porosity
-ageinit = 0.1; % initial age of organic matter at the sediment water interface
-age_root = 1; 
-k_O2 = 2; % Oxygen half-saturation constant (uM)
-k_SO4 = 20; % Sulfate half-saturation constant (uM)
+    k_O2 = Params.k_O2;
+    k_SO4 = Params.k_SO4;
+    KFEMonod = Params.KFEMonod;
 
-KFEMonod = 200;%1E7;%500; %umol/g - Monod constant for FeOOH reduction
+    DSO4 = Params.DSO4;
+    DCH4 = Params.DCH4;
+    DH2S = Params.DH2S;
+    DO2  = Params.DO2;
+    DHCO3 = Params.DHCO3;
+    DPO4  = Params.DPO4;
 
-DSO4 = 300; % cm2/yr diffusion coefficient sulfate
-DCH4 = 300; % cm2/yr diffusion coefficient sulfate
-DH2S = 300; % cm2/yr diffusion coefficient sulfide
-DO2 = 300;   % cm2/yr diffusion coefficient oxygen
-DHCO3 = 400;   % cm2/yr diffusion coefficient oxygen
-DPO4 = 400; % cm2/yr diffusion coefficient 
-Kreox = 500; %1600; % 1/umol/l/year ''Sulfide oxidation rate constant''
-KFe_HS = 100; %1600; % 1/umol/l/year ''Iron Sulfide oxidation rate constant''
-Iron_conc = 50; % Iron concentration (uM)
+    Kreox = Params.Kreox;
+    kFeOx = Params.kFeOx;
+    kFeS  = Params.kFeS;
 
-Calcium = 1000; %XL 10000; % calcium concentration
+    K_CH4_SO4 = Params.K_CH4_SO4;
+    K_CH4_O2  = Params.K_CH4_O2;
+    k_AOM = Params.k_AOM;
+    k_aerobic_CH4 = Params.k_aerobic_CH4;
 
-Calcium_activity = 0.6;%0.2; % calcium concentration
-CO3_activity = 0.6;%0.028; % calcium concentration
+    Ksp_ca = Params.Ksp_ca;
+    k_calcite = Params.k_calcite;
+    k_calcite_dis1 = Params.k_calcite_dis1;
+    k_calcite_dis2 = Params.k_calcite_dis2;
+    n_power_CaCO31 = Params.n_power_CaCO31;
+    n_power_CaCO32 = Params.n_power_CaCO32;
+    n_power_CaCO33 = Params.n_power_CaCO33;
+    Calcium_activity = Params.Calcium_activity;
+    CO3_activity     = Params.CO3_activity;
+    P_C_ratio = Params.P_C_ratio;
+
+    kapatite = Params.kapatite;
+    KFeS = Params.KFeS;
+    K_HS = Params.K_HS;
+    Q10 = Params.Q10;
+    T_ref = Params.T_ref;
+
+    % Site inputs
+    n = Config.n;
+    Bioirrig_top    = Config.Bioirrig_top;
+    Bioirrig_bottom = Config.Bioirrig_bottom;
+    Bioirrig_scale  = Config.Bioirrig_scale;
+    
+    Lbottom         = Config.Lbottom;
+    
+    Bioturbtop      = Config.Bioturbtop;
+    Bioturbbottom   = Config.Bioturbbottom;
+    bioturbscale    = Config.bioturbscale;
+    
+    vbottom         = Config.vbottom;
+    vbottom_fluid   = Config.vbottom_fluid;
+    
+    porostop        = Config.porostop;
+    porosbottom     = Config.porosbottom;
+    porosscale      = Config.porosscale;
+    
+    O2init          = Config.O2init;
+    SO4init         = Config.SO4init;
+    DICinit         = Config.DICinit;
+    HCO3init        = Config.HCO3init;
+    Calcium         = Config.Calcium;
+    CH4init         = Config.CH4init;
+    Feinit          = Config.Feinit;
+    HSinit          = Config.HSinit;
+    Pinitial        = Config.Pinitial;
+    
+    BE              = Config.BE;
+    NPP             = Config.NPP;
+    F_CaCO3         = Config.F_CaCO3;
+    
+    T_future        = Config.T_future;
 
 
-O2init = 50; % uM - O2 concentration at SWI
 
-SO4init = 200; %XL28000; % uM - SO4 concentration at SWI
+    BE = Config.BE;
+    NPP = Config.NPP;
+    if Config.use_hydro_npp_multiplier
+        NPP = NPP * Hydro.NPP_multiplier;
+    end
 
-Pinitial = 0; % uM - PO4 concentration at SWI
-Feinit = 0;  % uM - Fe concentration at SWI
-HSinit = 0;  % uM - H2S concentration at SWI
-Ksp_ca = 3000;%1E4; %uM2
+    F_FeOx = Config.F_FeOx;
+    F_CaCO3 = Config.F_CaCO3;
 
-k_calcite = 1;%1E-6;%1000; %umol/l/year
+    T_future = Config.T_future;
+    ageinit  = Config.ageinit;
+    age_root = Config.age_root;
 
-% k_calcite_dis = 10;%0.05;%0.05;%0.05;%0.005; % yr-1
-Mineral_Mass = 215; %basalt 215, albite 260, forsterite 140 MgO 40
+    % Optional weak hydro injection to diffusion coefficients
+    if Config.use_hydro_diffusion_multiplier
+        DSO4 = DSO4 * Hydro.diffusion_multiplier;
+        DCH4 = DCH4 * Hydro.diffusion_multiplier;
+        DH2S = DH2S * Hydro.diffusion_multiplier;
+        DO2  = DO2  * Hydro.diffusion_multiplier;
+        DHCO3 = DHCO3 * Hydro.diffusion_multiplier;
+    end
 
-
-DICinit = 1000;     % [DIC] [umol/kg]
-
-
-HCO3init = 950; 
-
-
-CH4init = 0;      % [CH4] at SWI uM
-P_C_ratio = 0.0094;
-K_CH4_SO4 = 100; % AOM with sulfate half saturation (uM)
-K_CH4_O2 = 1; % Aerobic methane oxidation half saturation (uM)
-
-k_AOM = 100; % AOM rate constant (1/year)
-
-k_aerobic_CH4 = 100; % aerobic methane oxidation rate constant (1/year)
-
-
-Sed_rate = 1;  %sediment accumulation rate (gram/cm2/year)
-BE = 0.2; %0.1;     % burial efficiency of organic from the water column model
-
-NPP = 800; %200      % Net Primary Production (gram/m2/year)
-
-F_FeOx = 20;   %mmol/m2/d
-
-
-kFeOx = 10; %100; % 1/umol/l/year
-kFeS = 10;%10;%0.1;%0.01;%0.08;%0.2;
-kapatite = 0.05; %0.01-0.1 1/year
-K_HS  = 7;
-X_apa = 0.04; %0.02-0.033 Van Capellen and Berner 1988
-T_apa = 25; %temperature for apatite
-n_apa = 1;
-Kp_ads = 6E-7;
-S_ads_coef = 1E4; %umol/gr
-Kviv = 3*1E6; %(umol/L)5
-alpha_viv = 1.5; 
-kviv = 1.7E-22;
-KFeS = 2500;  %umol/l
-F_CaCO3 = 10;  %XL 2000; %100; %10;%500;  % Flux of CaCO3 to sediment gram/m2/year
-k_Fe_pyrite = 1000;
-n_power_CaCO31 = 1.76;
-n_power_CaCO32 = 0.11;
-n_power_CaCO33 = 4;
-k_calcite_dis1 = 0.005;
-k_calcite_dis2 = 10;
-Q10 = 2; 
-T_ref = 25;
-T_future = 30;
-
-DOC_root_1 = 0; %500;%50;%500;;%1000;    % DOC flux release in seagrass root zone (mmol/m2/day; Eldridge & MorserMarine 2000)
-O2_root_1  = 0; %500;%2;%100;%500;   % O2 flux release in seagrass root zone (mmol/m2/day; Eldridge & MorserMarine 2000)
-POC_root_1 = 0; %2;%0.2;%2; %0.08;  % POC flux release in seagrass root zone (mol/m2/day; Eldridge & MorserMarine 2000)
-
+    DOC_root_1      = Config.DOC_root_1;
+    O2_root_1       = Config.O2_root_1;
+    POC_root_1      = Config.POC_root_1;
 % --------------- Calculating initial depth profiles for input parameters ----------------
 
 % k_sed = k_sed / 100;
@@ -150,28 +136,30 @@ POC_root_1 = 0; %2;%0.2;%2; %0.08;  % POC flux release in seagrass root zone (mo
 % k_calcite = k_calcite / 10;
 % kFeOx = kFeOx / 5;
 
-n=101;
-MaxDepth = Lbottom;
-z_sed=linspace(0,MaxDepth,n);
-z_biodiff=linspace(0,MaxDepth,10001);
-dz_sed=MaxDepth/(n-1);
-ALK = zeros(1,n);
- 
-poros = porosbottom + (porostop-porosbottom)*exp(-z_sed/porosscale);
-Bioturb_1 = Bioturbbottom + (Bioturbtop-Bioturbbottom)*exp(-z_biodiff/bioturbscale);
-Bioturb = interp1(z_biodiff,Bioturb_1,z_sed); 
+    z_sed = linspace(0, Lbottom, n);
+    z_biodiff = linspace(0, Lbottom, 10001);
+    dz_sed = Lbottom / (n - 1);
 
-Alpha_Bioirrig = Bioirrig_bottom + (Bioirrig_top-Bioirrig_bottom)*exp(-z_sed/Bioirrig_scale);
-v_burial = vbottom*(1-porosbottom)./(1-poros); %cm/year
-v_burial_Fluid = vbottom_fluid*(1+porosbottom)./(1+poros); %cm/year
+    if Config.use_constant_porosity
+        poros = Config.constant_porosity .* ones(1,n);
+    elseif Config.use_hydro_phi
+        poros = Hydro.phi_mix .* ones(1,n);
+    else
+        poros = Config.porosbottom + (Config.porostop - Config.porosbottom) .* exp(-z_sed / Config.porosscale);
+    end
 
+    Bioturb_1 = Config.Bioturbbottom + (Config.Bioturbtop - Config.Bioturbbottom) .* exp(-z_biodiff / Config.bioturbscale);
+    Bioturb = interp1(z_biodiff, Bioturb_1, z_sed);
 
-age = ageinit + cumsum(dz_sed./v_burial);
-k_sed = 10.^(-0.95*log10(age) - 0.81);
+    Alpha_Bioirrig = Config.Bioirrig_bottom + (Config.Bioirrig_top - Config.Bioirrig_bottom) .* exp(-z_sed / Config.Bioirrig_scale);
 
+    v_burial = Config.vbottom .* (1 - Config.porosbottom) ./ (1 - poros);
+    v_burial_Fluid = Config.vbottom_fluid .* (1 + Config.porosbottom) ./ (1 + poros);
 
+    age = Config.ageinit + cumsum(dz_sed ./ v_burial);
+    k_sed = 10.^(-0.95 .* log10(age) - 0.81);
+    Temp_factor = Q10.^((T_future - T_ref) / 10);
 
-Temp_factor = Q10.^((T_future - T_ref)/10);
 
 % ----------------------- Initial Carbonate concentration -----------------
 
@@ -474,7 +462,7 @@ R_FeOx_1(count_loop,:) = R_FeOx;
 % Fe_3_init  = 365.*1E2.*(F_FeOx)./(v_burial(1));  %umol/l
 Fe_3_init = 36.5.*(F_FeOx).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %umol/l
 
-KFEMonod = 2000;
+% KFEMonod = 2000;
 
 % % Solving ODE
 
@@ -860,7 +848,7 @@ ax.LineWidth = 2;
 
 subplot(m_plot,n_plot,13);
 plot(BEsed_org.*100,z_sed,'lineWidth',2); axis ij  %umol/l/year
-title('Burial Efficiency of organic matter')
+title('OM Burial Efficiency')
 ylabel('Depth (cm)');
 box on
 grid on
@@ -928,57 +916,56 @@ ax.LineWidth = 2;
 % ax.LineWidth = 2;
 % 
 
-AAA_time = toc;
-AAA_data = [Oxygen' C_DIC' C_alka' pH' sigma_carb' z_sed'];
-
-R_iron_unit = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9.*...
-                       (poros./(1-poros)).*1E-3.*(1./rho); %rate of iron reduction umol/g/year
-R_FeOx_unit = (kFeOx.*C_Fe.*Oxygen).*...
-              (poros./(1-poros)).*1E-3.*(1./rho);
-
-R_SRR_integ = cumsum(0.5.*R_SRR.*dz_sed.*1E-3);
-R_RC_integ = cumsum(RC.*dz_sed);
-R_iron_integ = cumsum(R_iron(count_loop-1,:).*dz_sed.*1E-3);
-R_iron_integ_unit = cumsum(R_iron_unit.*dz_sed.*rho.*((1-poros)./poros)); %umol/cm2/yr
-R_FeOx_integ_unit = cumsum(R_FeOx_unit.*dz_sed.*rho.*((1-poros)./poros)); %umol/cm2/yr
-R_FeOx_integ = cumsum(R_FeOx_1(count_loop-1,:).*dz_sed.*1E-3);
-R_FeS_integ = cumsum(R_FeS.*dz_sed.*1E-3);
-R_FeS_1_integ = cumsum(R_FeS_1(count_loop-1,:).*dz_sed.*1E-3);
-R_HSOX_integ = cumsum(R_HS_Ox.*dz_sed.*1E-3);
-R_biorrig_integ = cumsum((Alpha_Bioirrig.*(HSinit-C_HS)).*dz_sed.*1E-3);
-R_biorrig_integ_iron = cumsum((Alpha_Bioirrig.*(Feinit-C_Fe)).*dz_sed.*1E-3);
-R_biorrigALK_integ = cumsum((Alpha_Bioirrig.*(HCO3init-ALK)).*dz_sed.*1E-3);
-R_ALK = RC.*1E9 - R_respi;
-R_carb_integ = cumsum(R1_carb.*dz_sed.*1E-3);
-R_ALK_integ_WITHOUT = 2.*R_FeS_integ;
-R_ALK_integ_WITH = 2.*R_FeS_integ - (R_carb_integ);
-R_CH4O2_integ = cumsum((k_aerobic_CH4.* CH4.* (Oxygen./(Oxygen+K_CH4_O2))).*dz_sed.*1E-3);
-R_CH4SO4_integ = cumsum((k_AOM.* CH4.* (Sulfate./(Sulfate+K_CH4_SO4))).*dz_sed.*1E-3);
-
-R_net = R_SRR_integ - R_FeS_integ - R_HSOX_integ + R_biorrig_integ - F_diff_HS;
-
-R_net_iron = R_iron_integ - R_FeS_integ - R_FeOx_integ - F_diff_Fe(1,count_loop-1) + R_biorrig_integ_iron;
-
-R_net_Fe3  =  (v_burial(end).*C_Fe_3(end).*rho.*((1-poros(end))./poros(end))) - ...
-              (v_burial(1).*C_Fe_3(1).*rho.*((1-poros(1))./poros(1))) + R_iron_integ_unit - R_FeOx_integ_unit;
-
-R_net_Fe3_percent  =  100.*R_net_Fe3(end)./(v_burial(1).*C_Fe_3(1).*rho.*((1-poros(1))./poros(1)));
-
-R_net_org  =  (v_burial(end).*C_organic(end).*rho.*((1-poros(end))./12)) - (v_burial(1).*C_organic(1).*rho.*((1-poros(1))./12)) + ...
-              R_RC_integ;
-
-R_net_org_percent  =  100.*R_net_org(end)./((rho.*((1-poros(1))./12)).*v_burial(1).*C_organic(1));
-
-F_HS_tot = (R_SRR_integ - R_FeS_integ).*0.0274;
-
-F_S_out = (R_SRR_integ - R_FeS_integ - R_HSOX_integ).*0.0274;
-
-R_SRR_integ_store = R_SRR_integ(end).*0.0274;  %mmol/m2/d
-R_ALK_integ_WITH_store = R_ALK_integ_WITH(end).*0.0274; %mmol/m2/d
-
-F_ox_py = R_FeS_integ./R_SRR_integ;
-
-AAA_Store_1 = [F_FeOx R_SRR_integ_store R_ALK_integ_WITH_store];
-AAA_Store = [NPP.*BE R_ALK_integ_WITH(end) R_ALK_integ_WITHOUT(end) 2.*R_carb_integ(end) F_diff]; 
-
+% AAA_time = toc;
+% AAA_data = [Oxygen' C_DIC' C_alka' pH' sigma_carb' z_sed'];
+% 
+% R_iron_unit = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9.*...
+%                        (poros./(1-poros)).*1E-3.*(1./rho); %rate of iron reduction umol/g/year
+% R_FeOx_unit = (kFeOx.*C_Fe.*Oxygen).*...
+%               (poros./(1-poros)).*1E-3.*(1./rho);
+% 
+% R_SRR_integ = cumsum(0.5.*R_SRR.*dz_sed.*1E-3);
+% R_RC_integ = cumsum(RC.*dz_sed);
+% R_iron_integ = cumsum(R_iron(count_loop-1,:).*dz_sed.*1E-3);
+% R_iron_integ_unit = cumsum(R_iron_unit.*dz_sed.*rho.*((1-poros)./poros)); %umol/cm2/yr
+% R_FeOx_integ_unit = cumsum(R_FeOx_unit.*dz_sed.*rho.*((1-poros)./poros)); %umol/cm2/yr
+% R_FeOx_integ = cumsum(R_FeOx_1(count_loop-1,:).*dz_sed.*1E-3);
+% R_FeS_integ = cumsum(R_FeS.*dz_sed.*1E-3);
+% R_FeS_1_integ = cumsum(R_FeS_1(count_loop-1,:).*dz_sed.*1E-3);
+% R_HSOX_integ = cumsum(R_HS_Ox.*dz_sed.*1E-3);
+% R_biorrig_integ = cumsum((Alpha_Bioirrig.*(HSinit-C_HS)).*dz_sed.*1E-3);
+% R_biorrig_integ_iron = cumsum((Alpha_Bioirrig.*(Feinit-C_Fe)).*dz_sed.*1E-3);
+% R_biorrigALK_integ = cumsum((Alpha_Bioirrig.*(HCO3init-ALK)).*dz_sed.*1E-3);
+% R_ALK = RC.*1E9 - R_respi;
+% R_carb_integ = cumsum(R1_carb.*dz_sed.*1E-3);
+% R_ALK_integ_WITHOUT = 2.*R_FeS_integ;
+% R_ALK_integ_WITH = 2.*R_FeS_integ - (R_carb_integ);
+% R_CH4O2_integ = cumsum((k_aerobic_CH4.* CH4.* (Oxygen./(Oxygen+K_CH4_O2))).*dz_sed.*1E-3);
+% R_CH4SO4_integ = cumsum((k_AOM.* CH4.* (Sulfate./(Sulfate+K_CH4_SO4))).*dz_sed.*1E-3);
+% 
+% R_net = R_SRR_integ - R_FeS_integ - R_HSOX_integ + R_biorrig_integ - F_diff_HS;
+% 
+% R_net_iron = R_iron_integ - R_FeS_integ - R_FeOx_integ - F_diff_Fe(1,count_loop-1) + R_biorrig_integ_iron;
+% 
+% R_net_Fe3  =  (v_burial(end).*C_Fe_3(end).*rho.*((1-poros(end))./poros(end))) - ...
+%               (v_burial(1).*C_Fe_3(1).*rho.*((1-poros(1))./poros(1))) + R_iron_integ_unit - R_FeOx_integ_unit;
+% 
+% R_net_Fe3_percent  =  100.*R_net_Fe3(end)./(v_burial(1).*C_Fe_3(1).*rho.*((1-poros(1))./poros(1)));
+% 
+% R_net_org  =  (v_burial(end).*C_organic(end).*rho.*((1-poros(end))./12)) - (v_burial(1).*C_organic(1).*rho.*((1-poros(1))./12)) + ...
+%               R_RC_integ;
+% 
+% R_net_org_percent  =  100.*R_net_org(end)./((rho.*((1-poros(1))./12)).*v_burial(1).*C_organic(1));
+% 
+% F_HS_tot = (R_SRR_integ - R_FeS_integ).*0.0274;
+% 
+% F_S_out = (R_SRR_integ - R_FeS_integ - R_HSOX_integ).*0.0274;
+% 
+% R_SRR_integ_store = R_SRR_integ(end).*0.0274;  %mmol/m2/d
+% R_ALK_integ_WITH_store = R_ALK_integ_WITH(end).*0.0274; %mmol/m2/d
+% 
+% F_ox_py = R_FeS_integ./R_SRR_integ;
+% 
+% AAA_Store_1 = [F_FeOx R_SRR_integ_store R_ALK_integ_WITH_store];
+% AAA_Store = [NPP.*BE R_ALK_integ_WITH(end) R_ALK_integ_WITHOUT(end) 2.*R_carb_integ(end) F_diff]; 
 toc

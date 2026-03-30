@@ -58,7 +58,7 @@ global DHCO3 RC R_SRR kFeS C_Fe C_HS Alpha_Bioirrig DICinit HCO3init
 global v_burial_Fluid v_burial z_sed poros rho
 global k_calcite k_calcite_dis1 k_calcite_dis2 n_power_CaCO31 n_power_CaCO32 n_power_CaCO33
 global Calcium Calcium_activity CO3_activity Ksp_ca
-global Rate_Meth
+global Rate_Meth T_future
     v_burial_f = double(interp1(z_sed, v_burial_Fluid, x));
     v_burial_s = double(interp1(z_sed, v_burial, x));
     fi = double(interp1(z_sed, poros, x));
@@ -71,7 +71,7 @@ global Rate_Meth
     ALK = max(real(Y(3)), 1e-12);
     CaCO3 = max(real(Y(5)), 0);
     % calculate real time CO3
-    [~, CO3_current, ~] = River_Carbonate(ALK, DIC, 20, 0.1, 1);
+    [~, CO3_current, ~] = River_Carbonate(ALK, DIC, T_future, 0.1, 1);
     if isempty(CO3_current) || isnan(CO3_current)
         CO3_current = 1e-12;
     end
@@ -244,7 +244,7 @@ global O2init SO4init HSinit C_organic rho poros RC Alpha_Bioirrig
 global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS R_iron R_FeOx Fe_3_init
 global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit Iron_C R_HS_Ox kapatite P_apaeq R1_carb_disso R1_carb_form
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
-global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor
+global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor T_future
 Bioirrig_top = 100;%80; %1/yr
 Bioirrig_bottom = 0; %1/yr
 Bioirrig_scale = 0.75; %1/yr
@@ -253,7 +253,7 @@ t_final = 100; %year  ''Target Year''
 Bioturbtop = 10;%5; %cm2/yr bioturbation coefficient at top
 Bioturbbottom = 1; %cm2/yr bioturbation coefficient at bottom
 bioturbscale = 3; %cm - depth scale for decrease in bioturbation
-vbottom = 100; %cm/year
+vbottom = 1; %cm/year
 vbottom_fluid = 0;%0.1; %cm/year
 porosbottom = 0.7; %porosity
 porostop = 0.9;
@@ -276,8 +276,8 @@ Iron_conc = 50; % Iron concentration (uM)
 Calcium = 1000; %XL 10000; % calcium concentration
 Calcium_activity = 0.6;%0.2; % calcium concentration
 CO3_activity = 0.6;%0.028; % calcium concentration
-O2init = 150; % uM - O2 concentration at SWI
-SO4init = 3000; %XL28000; % uM - SO4 concentration at SWI
+O2init = 50; % uM - O2 concentration at SWI
+SO4init = 200; %XL28000; % uM - SO4 concentration at SWI
 Pinitial = 0; % uM - PO4 concentration at SWI
 Feinit = 0;  % uM - Fe concentration at SWI
 HSinit = 0;  % uM - H2S concentration at SWI
@@ -291,12 +291,12 @@ CH4init = 0;      % [CH4] at SWI uM
 P_C_ratio = 0.0094;
 K_CH4_SO4 = 100; % AOM with sulfate half saturation (uM)
 K_CH4_O2 = 1; % Aerobic methane oxidation half saturation (uM)
-k_AOM = 0.1; % AOM rate constant (1/year)
-k_aerobic_CH4 = 1; % aerobic methane oxidation rate constant (1/year)
+k_AOM = 100; % AOM rate constant (1/year)
+k_aerobic_CH4 = 100; % aerobic methane oxidation rate constant (1/year)
 Sed_rate = 1;  %sediment accumulation rate (gram/cm2/year)
 BE = 0.2; %0.1;     % burial efficiency of organic from the water column model
-NPP = 600; %200      % Net Primary Production (gram/m2/year)
-F_FeOx = 10;   %mmol/m2/d
+NPP = 800; %200      % Net Primary Production (gram/m2/year)
+F_FeOx = 20;   %mmol/m2/d
 kFeOx = 10; %100; % 1/umol/l/year
 kFeS = 10;%10;%0.1;%0.01;%0.08;%0.2;
 kapatite = 0.05; %0.01-0.1 1/year
@@ -319,7 +319,7 @@ k_calcite_dis1 = 0.005;
 k_calcite_dis2 = 10;
 Q10 = 2;
 T_ref = 25;
-T_future = 25;
+T_future = 30;
 DOC_root_1 = 0; %500;%50;%500;;%1000;    % DOC flux release in seagrass root zone (mmol/m2/day; Eldridge & MorserMarine 2000)
 O2_root_1  = 0; %500;%2;%100;%500;   % O2 flux release in seagrass root zone (mmol/m2/day; Eldridge & MorserMarine 2000)
 POC_root_1 = 0; %2;%0.2;%2; %0.08;  % POC flux release in seagrass root zone (mol/m2/day; Eldridge & MorserMarine 2000)
@@ -345,7 +345,7 @@ age = ageinit + cumsum(dz_sed./v_burial);
 k_sed = 10.^(-0.95*log10(age) - 0.81);
 Temp_factor = Q10.^((T_future - T_ref)/10);
 % ----------------------- Initial Carbonate concentration -----------------
-[~, CO3_top, ~] = River_Carbonate(HCO3init, DICinit, 20, 0.1, 1);
+[~, CO3_top, ~] = River_Carbonate(HCO3init, DICinit, T_future, 0.1, 1);
 % CO3_top = Carb_CO3(HCO3init,DICinit); % bottom water pH based on DIC and ALK top boundary
 CO3_1 = CO3_top*ones(1,n);
 C_HS  = zeros(1,n); %intial value for sulfide
@@ -644,7 +644,7 @@ F_diff_DIC = DHCO3 .* ((C_DIC(1,2) - C_DIC(1,1)) ./ (x(1,2) - x(1,1))) * 1E-3;
 F_diff     = DHCO3 .* ((C_alka(1,2) - C_alka(1,1)) ./ (x(1,2) - x(1,1))) * 1E-3;
 % -------------- pH and H2CO3 (2 for 6 calculation) -----------------------
 for i=1:n
-           [pH_1(1,i), CO3_1(1,i), C_H2CO3(1,i)] = River_Carbonate(ALK(1,i), C_DIC(1,i), 20, 0.1, 1);
+           [pH_1(1,i), CO3_1(1,i), C_H2CO3(1,i)] = River_Carbonate(ALK(1,i), C_DIC(1,i), T_future, 0.1, 1);
 end
 pH = pH_1;
 sigma_carb = (Calcium_activity .* Calcium .* CO3_activity .* CO3_1) ./ Ksp_ca - 1;
@@ -711,6 +711,7 @@ R_ALK_DIC = F_diff./F_diff_DIC;
 F_diff_CH4 = DCH4.*((CH4(1,2) - CH4(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 % -------------------------------------------------------------------------
 % ----------------------------- PLOTS -------------------------------------
+clf;
 n_plot = 6; % number of plots in each row
 m_plot = 3; % number of total rows
 % Organic
@@ -829,10 +830,14 @@ subplot(m_plot,n_plot,16);
 plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
 title('Calciite saturation (\Omega - 1)')
 box on
+grid on
+ax.LineWidth = 2;
 subplot(m_plot,n_plot,17);
-plot(FeooH,z_sed,'lineWidth',2); axis ij
+plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
 title('Fe(III) (\mumol/gr)')
 box on
+grid on
+ax.LineWidth = 2;
 % Mineral saturation indices
 % subplot(m_plot,n_plot,16);
 % plot(delta_viv1,z_sed,delta_apat2,z_sed,delta_FeS,z_sed,'lineWidth',2); axis ij  %umol/l/year
