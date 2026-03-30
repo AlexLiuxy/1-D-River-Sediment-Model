@@ -29,7 +29,7 @@ Bioturbtop = 10;%5; %cm2/yr bioturbation coefficient at top
 Bioturbbottom = 1; %cm2/yr bioturbation coefficient at bottom
 bioturbscale = 3; %cm - depth scale for decrease in bioturbation
 
-vbottom = 1; %cm/year
+vbottom = 0.5; %cm/year
 
 vbottom_fluid = 0;%0.1; %cm/year
 porosbottom = 0.7; %porosity
