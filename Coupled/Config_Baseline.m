@@ -35,9 +35,9 @@ function Config = Config_Baseline()
     Config.Pinitial = 0;          % uM
 
     % ---------------- Fluxes ----------------
-    Config.NPP = 600;             % g / m2 / yr
-    Config.BE  = 0.2;
-    Config.F_FeOx  = 10;          % mmol / m2 / d
+    Config.NPP = 200;             % g / m2 / yr
+    Config.BE  = 0.1;
+    Config.F_FeOx  = 2;          % mmol / m2 / d
     Config.F_CaCO3 = 10;          % g / m2 / yr
 
     % ---------------- Temperature / OM age ----------------
@@ -65,7 +65,7 @@ function Config = Config_Baseline()
     Config.use_constant_porosity = false;
     Config.constant_porosity = 0.75;
 
-    Config.use_hydro_phi = true;
+    Config.use_hydro_phi = false;
     Config.use_hydro_npp_multiplier = false;
     Config.use_hydro_diffusion_multiplier = false;
 

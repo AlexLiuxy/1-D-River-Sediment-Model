@@ -20,8 +20,8 @@ function Params = Params_Static()
 
     Params.K_CH4_SO4   = 100;    % uM
     Params.K_CH4_O2    = 1;      % uM
-    Params.k_AOM       = 0.1;    % 1 / yr
-    Params.k_aerobic_CH4 = 1;    % 1 / yr
+    Params.k_AOM       = 1.0;    % 1 / yr
+    Params.k_aerobic_CH4 = 6;    % 1 / yr
 
     Params.Ksp_ca = 3000;        % uM^2
     Params.k_calcite = 1;

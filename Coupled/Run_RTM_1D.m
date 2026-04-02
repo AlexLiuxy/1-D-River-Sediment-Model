@@ -262,9 +262,9 @@ for i=1:n
     FeOx(1,mm_count)=Ironoxy(1,i);
 
 end
-% FeooH =  FeOx;
-FeooH =  zeros(1,n);
-
+% FeooH =  FeOx;wor
+% FeooH =  zeros(1,n);
+FeooH = max(FeOx, 1e-12);
 % ---------------------------- CORRECTING ACTIVITY PROFILES ---------------
 b_oxic = 0.95;%0.977;
 a_oxic = 0.81;%0.312;
@@ -482,6 +482,7 @@ y = max(y, 1e-12);
 
 C_Fe_3 = y(1,:);
 FeooH = C_Fe_3;
+% FeooH = max(C_Fe_3, 0.2 .* FeOx);
 
 % ------------------------ SULFATE ---------------------------------------
 
@@ -716,7 +717,8 @@ m_plot = 3; % number of total rows
 
 subplot(m_plot,n_plot,1);
 
-plot((C_organic + POC_root).*100,z_sed,'lineWidth',2); axis ij
+% plot((C_organic + POC_root).*100,z_sed,'lineWidth',2); axis ij
+plot((C_organic ).*100,z_sed,'lineWidth',2); axis ij
 title('Organic (%gDw)')
 ylabel('Depth (cm)');
 box on
@@ -863,7 +865,7 @@ ax.LineWidth = 2;
 % legend('Sulfate Red','Aerobic Resp');
 
 
-subplot(m_plot,n_plot,14);
+subplot(m_plot,n_plot,15);
 plot((0.5.*R_SRR)./365,z_sed,'lineWidth',2); axis ij %umol/l/year
 title('Sulfate Reduction Rate (nmol/cm3/d)')
 % legend('Sulfate Red');
@@ -883,7 +885,7 @@ ax.LineWidth = 2;
 % box on
 
 
-subplot(m_plot,n_plot,16);
+subplot(m_plot,n_plot,17);
 
 plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
 title('Calciite saturation (\Omega - 1)')
@@ -893,7 +895,7 @@ grid on
 
 ax.LineWidth = 2;
 
-subplot(m_plot,n_plot,17);
+subplot(m_plot,n_plot,18);
 
 plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
 title('Fe(III) (\mumol/gr)')
