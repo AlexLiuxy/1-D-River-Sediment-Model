@@ -15,7 +15,7 @@ Param_Space = {
     'F_FeOx',     2,   0.1,   5.0;   % Fe(III) Flux (mmol/m2/d)
     'F_CaCO3',        10,    1,     30;
     'SO4init',    200,   50,    500;  % Boundary SO4 (uM)
-%     'HCO3init',       950,   500,   2000;
+    'HCO3init',       950,   500,   2000;
     'DICinit',        1000,  700,   2500;
     'Calcium',        1000,  200,   2000;
     'Bioturbtop', 10,    1,     30;     % Bioturbation (cm2/yr)
@@ -30,8 +30,8 @@ Param_Space = {
     'K_CH4_SO4',  100,   10,   500;    % uM
     'k_AOM',      1,   0.1,   10;    % 1 / yr
     'k_aerobic_CH4',      6,   1,   10 ;   % 1 / yr
-    'k_calcite',      1,     0.2,   5;
-    'k_calcite_dis1', 0.005, 0.001, 0.05;
+    % 'k_calcite',      1,     0.2,   5;
+    % 'k_calcite_dis1', 0.005, 0.001, 0.05;
     'k_calcite_dis2', 10,    1,     50;
 };
 
