@@ -7,24 +7,35 @@
 % Dissolved inorganic carbon: Organic matter degradation and carbonate precipitation
 % Alkalinity: Sulfate reduction and carbonate precipitation
 
-clear all
-tic
-
-
+function Outputs = Run_RTM_1D(Custom_Config, Custom_Params)
+% RUN_RTM_1D
+% Sediment Diagenesis Model - Functionized for Sensitivity Analysis
 
 % ----------------------------- INPUT PARAMETERS ---------------------------
 
-global v_burial Mineral_Mass z_sed KFe_HS Oxygen Sulfate
-global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox Iron_conc Bioturb Calcium DHCO3 HCO3init 
+global v_burial Mineral_Mass z_sed Oxygen Sulfate
+global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox  Bioturb Calcium DHCO3 HCO3init 
 global O2init SO4init HSinit C_organic rho poros RC Alpha_Bioirrig
-global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS R_iron R_FeOx Fe_3_init
-global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit Iron_C R_HS_Ox kapatite P_apaeq R1_carb_disso R1_carb_form
+global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS  R_FeOx Fe_3_init
+global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_Ox kapatite 
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor T_future
+%global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
+    
 
-    Params = Params_Static();
-    Config = Config_Baseline();
-    Hydro  = Hydro_Preprocessor(Config, Params);
+    if nargin < 1 || isempty(Custom_Config)
+        Config = Config_Baseline();
+    else
+        Config = Custom_Config;
+    end
+    if nargin < 2 || isempty(Custom_Params)
+        Params = Params_Static();
+    else
+        Params = Custom_Params;
+    end
+%         Params = Params_Static();
+%     Config = Config_Baseline();
+%     Hydro  = Hydro_Preprocessor(Config, Params);
 
     rho = Params.rho;
     Mineral_Mass = 215;   % keep as legacy until explicitly audited
@@ -231,7 +242,7 @@ y = max(y, 1e-12);
 C_O2 = y(1,:);
 Oxygen = C_O2;
 
-% ---------------------------- OXYGEN PENTRATION DEPTH --------------------
+% ---------------------------- OXYGEN PENTRATION DEPTS_ --------------------
 
 count_OPD = 0;
 for i=1:n
@@ -421,6 +432,24 @@ y = max(y, 1e-12);
 
 C_O2 = y(1,:);
 Oxygen = C_O2;
+% -------- update OPD-based k_sed every iteration --------
+OPD_1 = [];
+num_OPD1 = [];
+
+for i = 1:n
+    if Oxygen(i) < 1
+        OPD_1(end+1) = z_sed(i);
+        num_OPD1(end+1) = i;
+    end
+end
+
+if isempty(OPD_1)
+    OPD = Lbottom;
+    num_OPD = n;
+else
+    OPD = OPD_1(1);
+    num_OPD = num_OPD1(1);
+end
 
 R_respi = RC.* (Oxygen./(Oxygen+k_O2)).*1E9; %rate of aerobic respiration umol/l/year
 
@@ -443,22 +472,22 @@ end
 y = max(y, 1e-12);
 
 C_Fe = y(1,:);
-Iron_C(iteration,:) = C_Fe;
+% Iron_C(iteration,:) = C_Fe;
+% 
+% for i=1:n
+%   if Iron_C(iteration,i) < 0
+%       Iron_C(iteration,i) = 0;
+%   end 
+% end
 
-for i=1:n
-  if Iron_C(iteration,i) < 0
-      Iron_C(iteration,i) = 0;
-  end 
-end
-
-F_diff_Fe(1,count_loop) = DH2S.*((C_Fe(1,2) - C_Fe(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
+% F_diff_Fe(1,count_loop) = DH2S.*((C_Fe(1,2) - C_Fe(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 % ------------------------ IRON(III) ---------------------------------------
 
 Inhib = (k_O2./(Oxygen+k_O2)); % inhibition term for sulfate reduction by oxic respiration
-R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
+% R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
 R_FeOx = (kFeOx.*C_Fe.*Oxygen);
-R_FeOx_1(count_loop,:) = R_FeOx;
+% R_FeOx_1(count_loop,:) = R_FeOx;
 % Fe_3_init  = 365.*1E2.*(F_FeOx)./(v_burial(1));  %umol/l
 Fe_3_init = 36.5.*(F_FeOx).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %umol/l
 
@@ -535,21 +564,22 @@ for i=1:n
 end
 
 HS_conc = Sulfide(iteration,:)./(1+((10.^(6-pH))./K_HS));
-sigma_FeS_1 =  (Iron_C(iteration,:).*HS_conc)./((10.^(6-pH)).*KFeS);
-delta_FeS  = (sigma_FeS_1 - 1);
+% sigma_FeS_1 =  (Iron_C(iteration,:).*HS_conc)./((10.^(6-pH)).*KFeS);
+% delta_FeS  = (sigma_FeS_1 - 1);
+% 
+% for i=1:n
+%   if delta_FeS (1,i) > 0
+%       delta_FeS1(1,i) = 1;
+%   else 
+%       delta_FeS1(1,i) = 0;
+%   end 
+% end
 
-for i=1:n
-  if delta_FeS (1,i) > 0
-      delta_FeS1(1,i) = 1;
-  else 
-      delta_FeS1(1,i) = 0;
-  end 
-end
+% R_FeS = kFeS.*C_Fe.*C_HS;
+R_FeS = kFeS .* C_Fe .* HS_conc;
 
-R_FeS = kFeS.*C_Fe.*C_HS;
-
-R_FeS_1(count_loop,:) = R_FeS;
-R_FeS_store(iteration,:) = R_FeS;
+% R_FeS_1(count_loop,:) = R_FeS;
+% R_FeS_store(iteration,:) = R_FeS;
 
 for i=1:n
   if R_FeS(1,i) < 0
@@ -557,8 +587,10 @@ for i=1:n
   end 
 end
 
-R_HS_Ox = Sulfide(iteration,:).* Oxygen.*Kreox; %rate of sulfide reduction umol/l/year
-F_diff_HS = DH2S.*((C_HS(1,2) - C_HS(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
+% R_HS_Ox = Sulfide(iteration,:).* Oxygen.*Kreox; %rate of sulfide reduction umol/l/year
+% R_HS_Ox = Kreox .* HS_conc .* Oxygen;%XL
+
+% F_diff_HS = DH2S.*((C_HS(1,2) - C_HS(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 % ------------------------ METHANE ---------------------------------------
 
@@ -607,9 +639,9 @@ sol_coupled = bvp4c(@Coupled_Carbonate_ODE, @Coupled_Carbonate_bc, solinit_coupl
 
 y_coupled = deval(sol_coupled, x);
 
-C_DIC  = y_coupled(1,:);
-C_alka = y_coupled(3,:);
-CaCO3  = y_coupled(5,:);
+C_DIC  = max(real(y_coupled(1,:)), 1e-12);
+C_alka = max(real(y_coupled(3,:)), 1e-12);
+CaCO3  = max(real(y_coupled(5,:)), 0);
 ALK    = C_alka;
 
 F_diff_DIC = DHCO3 .* ((C_DIC(1,2) - C_DIC(1,1)) ./ (x(1,2) - x(1,1))) * 1E-3;
@@ -706,207 +738,269 @@ R_ALK_DIC = F_diff./F_diff_DIC;
 F_diff_CH4 = DCH4.*((CH4(1,2) - CH4(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 
-% -------------------------------------------------------------------------
-% ----------------------------- PLOTS -------------------------------------
-clf;
-n_plot = 6; % number of plots in each row
-m_plot = 3; % number of total rows
+% ----------------------------- OUTPUT PACKAGING ---------------------------
+    Outputs.z_sed = z_sed;
+    Outputs.pH_profile = pH;
+    Outputs.CH4_profile = CH4;
+    Outputs.O2_profile = Oxygen;
+%     Outputs.SO4_profile = Sulfate;
+%     Outputs.DIC_profile = C_DIC;
+
+    % Core Diagnostics
+    Outputs.Max_CH4 = max(CH4);
 
 
-% Organic
+    Outputs.Org_Bottom = C_organic(end) * 100; % %gDw
+    Outputs.ALK_Bottom = ALK(end);             % uM
+    Outputs.pH_Bottom  = pH(end);              % 
+    Outputs.CH4_Bottom = CH4(end);             % uM
+%     Outputs.Org_Top    = C_organic(1) * 100; % %gDw
 
-subplot(m_plot,n_plot,1);
+    % OPD: O2 < 1 uM
+    idx_O2 = find(Oxygen < 1, 1);
+    if isempty(idx_O2), Outputs.OPD = z_sed(end); else, Outputs.OPD = z_sed(idx_O2); end
 
-% plot((C_organic + POC_root).*100,z_sed,'lineWidth',2); axis ij
-plot((C_organic ).*100,z_sed,'lineWidth',2); axis ij
-title('Organic (%gDw)')
-ylabel('Depth (cm)');
-box on
-
-
-% Oxygen
-
-subplot(m_plot,n_plot,2);
-
-plot(Oxygen,z_sed,'lineWidth',2); axis ij
-title('[O_2] (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Iron
-
-subplot(m_plot,n_plot,3);
-
-plot(C_Fe,z_sed,'lineWidth',2); axis ij
-title('[Fe^{2+}] (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Sulfate
-
-subplot(m_plot,n_plot,4);
-
-plot(Sulfate,z_sed,'lineWidth',2); axis ij
-title('[SO_4] (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Sulfide
-
-subplot(m_plot,n_plot,5);
-
-plot(C_HS,z_sed,'lineWidth',2); axis ij
-title('[H_2S] (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Methane
-
-subplot(m_plot,n_plot,6);
-
-plot(CH4,z_sed,'lineWidth',2); axis ij
-title('[CH_4] (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% CaCO3
-
-subplot(m_plot,n_plot,7);
-
-% plot(CaCO3.*(1E-5.*(poros2./(1-poros2)).*(1./rho)),z_sed,'lineWidth',2); axis ij
-plot(CaCO3.*100,z_sed,'lineWidth',2); axis ij
-title('CaCO3')
-ylabel('Depth (cm)');
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% DIC
-
-subplot(m_plot,n_plot,8);
-
-plot(C_DIC,z_sed,'lineWidth',2); axis ij
-title('DIC (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% ALK
-
-subplot(m_plot,n_plot,9);
-
-plot(C_alka,z_sed,'lineWidth',2); axis ij
-title('ALK (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Carbonic Acid
-
-subplot(m_plot,n_plot,10);
-
-plot(C_H2CO3,z_sed,'lineWidth',2); axis ij
-title('Carb Acid (\muM)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% pH
-subplot(m_plot,n_plot,11);
-
-plot(pH,z_sed,'lineWidth',2); axis ij
-title('pH')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Organic degradation rate
-
-subplot(m_plot,n_plot,12);
-
-plot(RC.* 1E9,z_sed,'lineWidth',2); axis ij  %umol/l/year
-title('Mineralization Rate (\mumol/l/year)')
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Burial efficiency of Organic
-
-subplot(m_plot,n_plot,13);
-plot(BEsed_org.*100,z_sed,'lineWidth',2); axis ij  %umol/l/year
-title('OM Burial Efficiency')
-ylabel('Depth (cm)');
-box on
-grid on
-
-ax.LineWidth = 2;
-
-% Aerobic respiration and sulfate reduction rates
-
-% subplot(m_plot,n_plot,14);
-% plot(R_SRR,z_sed,R_respi,z_sed,'lineWidth',2); axis ij %umol/l/year
-% title('Rate (\mumol/l/year)')
-% legend('Sulfate Red','Aerobic Resp');
+    % SO4_Depth: SO4 降至 < 10 uM
+    idx_SO4 = find(Sulfate < 10, 1);
+    if isempty(idx_SO4), Outputs.SO4_Depth = z_sed(end); else, Outputs.SO4_Depth = z_sed(idx_SO4); end
 
 
-subplot(m_plot,n_plot,15);
-plot((0.5.*R_SRR)./365,z_sed,'lineWidth',2); axis ij %umol/l/year
-title('Sulfate Reduction Rate (nmol/cm3/d)')
-% legend('Sulfate Red');
+    idx_top5 = (z_sed <= 5);                   % 圈定 0-5 cm 网格
+    idx_bot5 = (z_sed >= (Lbottom - 5));       % 圈定底部 5 cm 网格
+    
+    Outputs.ALK_Bot5   = mean(ALK(idx_bot5));             % 底层 5cm 平均碱度
+    Outputs.Sigma_Top5 = mean(sigma_carb(idx_top5));      % 表层 5cm 平均饱和度 (Omega-1)
+    Outputs.CaCO3_Top5 = mean(CaCO3(idx_top5)) * 100;     % 表层 5cm 平均 CaCO3 (%gDw)
+    Outputs.Integ_Meth = trapz(z_sed, Rate_Meth);         %integrated Rate_Meth
+    
+%     % CH4_Onset_Depth: CH4 超过 10 uM 的深度
+%     idx_CH4 = find(CH4 > 10, 1);
+%     if isempty(idx_CH4), Outputs.CH4_Onset = z_sed(end); else, Outputs.CH4_Onset = z_sed(idx_CH4); end
+%     
+%     % Sigma0_Depth: 碳酸钙饱和度 Omega-1 穿过 0 的深度 (>= 0)
+%     idx_sigma = find(sigma_carb >= 0, 1);
+%     if isempty(idx_sigma), Outputs.Sigma0_Depth = z_sed(end); else, Outputs.Sigma0_Depth = z_sed(idx_sigma); end
+%     
+%     % CaCO3_Front_Depth: 碳酸钙开始显著积累的深度 (设定阈值为 1e-4，即脱离初始极小值)
+%     idx_CaCO3 = find(CaCO3 > 1e-4, 1);
+%     if isempty(idx_CaCO3), Outputs.CaCO3_Front = z_sed(end); else, Outputs.CaCO3_Front = z_sed(idx_CaCO3); end
 
-box on
-grid on
 
-ax.LineWidth = 2;
-
-% Carbonate saturation index
-
-% subplot(m_plot,n_plot,15);
+%     % Methane Appearance Depth (Depth where CH4 > 5 uM)
+%     ch4_idx = find(CH4 > 5, 1);
+%     if isempty(ch4_idx)
+%         Outputs.CH4_Depth = Lbottom; % No significant methane
+%     else
+%         Outputs.CH4_Depth = z_sed(ch4_idx);
+%     end
 % 
-% plot(sigma_carb(iteration-1,:),z_sed,'lineWidth',2); axis ij  %umol/l/year
-% title('Caclite saturation (\Omega - 1)')
+%     Outputs.Convergence_Status = K_converge;
+
+
+end % End of Function
+
+
+% % -------------------------------------------------------------------------
+% % ----------------------------- PLOTS -------------------------------------
+% clf;
+% n_plot = 6; % number of plots in each row
+% m_plot = 3; % number of total rows
+% 
+% 
+% % Organic
+% 
+% subplot(m_plot,n_plot,1);
+% 
+% % plot((C_organic + POC_root).*100,z_sed,'lineWidth',2); axis ij
+% plot((C_organic ).*100,z_sed,'lineWidth',2); axis ij
+% title('Organic (%gDw)')
+% ylabel('Depth (cm)');
+% box on
+% 
+% 
+% % Oxygen
+% 
+% subplot(m_plot,n_plot,2);
+% 
+% plot(Oxygen,z_sed,'lineWidth',2); axis ij
+% title('[O_2] (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Iron
+% 
+% subplot(m_plot,n_plot,3);
+% 
+% plot(C_Fe,z_sed,'lineWidth',2); axis ij
+% title('[Fe^{2+}] (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Sulfate
+% 
+% subplot(m_plot,n_plot,4);
+% 
+% plot(Sulfate,z_sed,'lineWidth',2); axis ij
+% title('[SO_4] (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Sulfide
+% 
+% subplot(m_plot,n_plot,5);
+% 
+% plot(C_HS,z_sed,'lineWidth',2); axis ij
+% title('[H_2S] (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Methane
+% 
+% subplot(m_plot,n_plot,6);
+% 
+% plot(CH4,z_sed,'lineWidth',2); axis ij
+% title('[CH_4] (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % CaCO3
+% 
+% subplot(m_plot,n_plot,7);
+% 
+% % plot(CaCO3.*(1E-5.*(poros2./(1-poros2)).*(1./rho)),z_sed,'lineWidth',2); axis ij
+% plot(CaCO3.*100,z_sed,'lineWidth',2); axis ij
+% title('CaCO3')
+% ylabel('Depth (cm)');
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % DIC
+% 
+% subplot(m_plot,n_plot,8);
+% 
+% plot(C_DIC,z_sed,'lineWidth',2); axis ij
+% title('DIC (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % ALK
+% 
+% subplot(m_plot,n_plot,9);
+% 
+% plot(C_alka,z_sed,'lineWidth',2); axis ij
+% title('ALK (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Carbonic Acid
+% 
+% subplot(m_plot,n_plot,10);
+% 
+% plot(C_H2CO3,z_sed,'lineWidth',2); axis ij
+% title('Carb Acid (\muM)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % pH
+% subplot(m_plot,n_plot,11);
+% 
+% plot(pH,z_sed,'lineWidth',2); axis ij
+% title('pH')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Organic degradation rate
+% 
+% subplot(m_plot,n_plot,12);
+% 
+% plot(RC.* 1E9,z_sed,'lineWidth',2); axis ij  %umol/l/year
+% title('Mineralization Rate (\mumol/l/year)')
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Burial efficiency of Organic
+% 
+% subplot(m_plot,n_plot,13);
+% plot(BEsed_org.*100,z_sed,'lineWidth',2); axis ij  %umol/l/year
+% title('OM Burial Efficiency')
+% ylabel('Depth (cm)');
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Aerobic respiration and sulfate reduction rates
+% 
+% % subplot(m_plot,n_plot,14);
+% % plot(R_SRR,z_sed,R_respi,z_sed,'lineWidth',2); axis ij %umol/l/year
+% % title('Rate (\mumol/l/year)')
+% % legend('Sulfate Red','Aerobic Resp');
+% 
+% 
+% subplot(m_plot,n_plot,15);
+% plot((0.5.*R_SRR)./365,z_sed,'lineWidth',2); axis ij %umol/l/year
+% title('Sulfate Reduction Rate (nmol/cm3/d)')
+% % legend('Sulfate Red');
 % 
 % box on
-
-
-subplot(m_plot,n_plot,17);
-
-plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
-title('Calciite saturation (\Omega - 1)')
-
-box on
-grid on
-
-ax.LineWidth = 2;
-
-subplot(m_plot,n_plot,18);
-
-plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
-title('Fe(III) (\mumol/gr)')
-
-box on
-grid on
-
-ax.LineWidth = 2;
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% % Carbonate saturation index
+% 
+% % subplot(m_plot,n_plot,15);
+% % 
+% % plot(sigma_carb(iteration-1,:),z_sed,'lineWidth',2); axis ij  %umol/l/year
+% % title('Caclite saturation (\Omega - 1)')
+% % 
+% % box on
+% 
+% 
+% subplot(m_plot,n_plot,17);
+% 
+% plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
+% title('Calciite saturation (\Omega - 1)')
+% 
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
+% 
+% subplot(m_plot,n_plot,18);
+% 
+% plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
+% title('Fe(III) (\mumol/gr)')
+% 
+% box on
+% grid on
+% 
+% ax.LineWidth = 2;
 
 % Mineral saturation indices
-
+% 
 % subplot(m_plot,n_plot,16);
 % plot(delta_viv1,z_sed,delta_apat2,z_sed,delta_FeS,z_sed,'lineWidth',2); axis ij  %umol/l/year
 % title('Mineral saturation (\Omega - 1)')
@@ -916,7 +1010,7 @@ ax.LineWidth = 2;
 % grid on
 % 
 % ax.LineWidth = 2;
-% 
+
 
 % AAA_time = toc;
 % AAA_data = [Oxygen' C_DIC' C_alka' pH' sigma_carb' z_sed'];
@@ -934,7 +1028,7 @@ ax.LineWidth = 2;
 % R_FeOx_integ = cumsum(R_FeOx_1(count_loop-1,:).*dz_sed.*1E-3);
 % R_FeS_integ = cumsum(R_FeS.*dz_sed.*1E-3);
 % R_FeS_1_integ = cumsum(R_FeS_1(count_loop-1,:).*dz_sed.*1E-3);
-% R_HSOX_integ = cumsum(R_HS_Ox.*dz_sed.*1E-3);
+% R_HSOX_integ = cumsum(R_Ox.*dz_sed.*1E-3);
 % R_biorrig_integ = cumsum((Alpha_Bioirrig.*(HSinit-C_HS)).*dz_sed.*1E-3);
 % R_biorrig_integ_iron = cumsum((Alpha_Bioirrig.*(Feinit-C_Fe)).*dz_sed.*1E-3);
 % R_biorrigALK_integ = cumsum((Alpha_Bioirrig.*(HCO3init-ALK)).*dz_sed.*1E-3);
@@ -969,5 +1063,4 @@ ax.LineWidth = 2;
 % F_ox_py = R_FeS_integ./R_SRR_integ;
 % 
 % AAA_Store_1 = [F_FeOx R_SRR_integ_store R_ALK_integ_WITH_store];
-% AAA_Store = [NPP.*BE R_ALK_integ_WITH(end) R_ALK_integ_WITHOUT(end) 2.*R_carb_integ(end) F_diff]; 
-toc
+% AAA_Store = [NPP.*BE R_ALK_integ_WITH(end) R_ALK_integ_WITHOUT(end) 2.*R_carb_integ(end) F_diff];

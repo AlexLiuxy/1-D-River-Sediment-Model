@@ -7,7 +7,7 @@ function Params = Params_Static()
     Params.k_SO4 = 20;           % uM
     Params.KFEMonod = 200;       % umol / g
 
-    Params.DSO4 = 300;           % cm2 / yr
+    Params.DSO4 = 310;%300;           % cm2 / yr
     Params.DCH4 = 300;           % cm2 / yr
     Params.DH2S = 300;           % cm2 / yr
     Params.DO2  = 300;           % cm2 / yr
