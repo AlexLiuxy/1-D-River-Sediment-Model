@@ -1,7 +1,7 @@
 function Config = Config_Baseline()
 % CONFIG_BASELINE
 % Site / scenario specific settings for the OLD sequential core.
-
+Config.Corg_top = 0.028;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % ---------------- Domain ----------------
     Config.Lbottom = 30;          % cm
     Config.n = 101;
@@ -24,10 +24,10 @@ function Config = Config_Baseline()
     Config.Bioirrig_scale = 0.75;
 
     % ---------------- Boundary concentrations ----------------
-    Config.O2init   = 150;        % uM
-    Config.SO4init  = 200;        % uM
-    Config.DICinit  = 1000;       % uM
-    Config.HCO3init = 950;        % uM
+    Config.O2init   = 200;%150;        % uM
+    Config.SO4init  = 29000;%200;        % uM
+    Config.DICinit  = 2700;%1000;       % uM
+    Config.HCO3init = 2000;%950;        % uM
     Config.Calcium  = 1000;       % uM
     Config.CH4init  = 0;          % uM
     Config.Feinit   = 0;          % uM

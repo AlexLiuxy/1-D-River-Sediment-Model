@@ -7,13 +7,13 @@
 % Dissolved inorganic carbon: Organic matter degradation and carbonate precipitation
 % Alkalinity: Sulfate reduction and carbonate precipitation
 
-function Outputs = Run_RTM_1D(Custom_Config, Custom_Params)
+% function Outputs = Run_RTM_1D(Custom_Config, Custom_Params)
 % RUN_RTM_1D
 % Sediment Diagenesis Model - Functionized for Sensitivity Analysis
-
+clear all
 % ----------------------------- INPUT PARAMETERS ---------------------------
 
-global v_burial Mineral_Mass z_sed Oxygen Sulfate
+global v_burial Mineral_Mass z_sed Oxygen Sulfate Corg_top
 global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox  Bioturb Calcium DHCO3 HCO3init 
 global O2init SO4init HSinit C_organic rho poros RC Alpha_Bioirrig
 global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS  R_FeOx Fe_3_init
@@ -23,18 +23,18 @@ global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_c
 %global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
     
 
-    if nargin < 1 || isempty(Custom_Config)
-        Config = Config_Baseline();
-    else
-        Config = Custom_Config;
-    end
-    if nargin < 2 || isempty(Custom_Params)
-        Params = Params_Static();
-    else
-        Params = Custom_Params;
-    end
+%     if nargin < 1 || isempty(Custom_Config)
+%         Config = Config_Baseline();
+%     else
+%         Config = Custom_Config;
+%     end
+%     if nargin < 2 || isempty(Custom_Params)
 %         Params = Params_Static();
-%     Config = Config_Baseline();
+%     else
+%         Params = Custom_Params;
+%     end
+        Params = Params_Static();
+    Config = Config_Baseline();
 %     Hydro  = Hydro_Preprocessor(Config, Params);
 
     rho = Params.rho;
@@ -113,7 +113,7 @@ global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_c
     T_future        = Config.T_future;
 
 
-
+Corg_top = Config.Corg_top;
     BE = Config.BE;
     NPP = Config.NPP;
     if Config.use_hydro_npp_multiplier
@@ -195,32 +195,49 @@ hold on
 
 % Solving ODE
 
+% if Bioturbtop == 0
+% 
+% x = linspace(0,Lbottom,n);
+% CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+% C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% else 
+% 
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+% sol = bvp4c(@organicODE,@organicbc,solinit);
+% x = linspace(0,Lbottom,n);
+% y = deval(sol,x);
+% 
+% if min(y) < 0
+%     fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+% 
+% C_organic = y(1,:);
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% end
 if Bioturbtop == 0
-
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
-else 
-
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-x = linspace(0,Lbottom,n);
-y = deval(sol,x);
-
-if min(y) < 0
-    fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    x = linspace(0,Lbottom,n);
+    C_organic = Corg_top .* exp(-cumsum((Temp_factor .* k_sed) ./ v_burial .* dz_sed));
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
+else
+    nmesh = 1000;
+    x = linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh), [Corg_top 0]);
+    sol = bvp4c(@organicODE, @organicbc, solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    C_organic = y(1,:);
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 end
-y = max(y, 1e-12);
-
-C_organic = y(1,:);
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
-end
-
 % ---------------------------- OXYGEN -------------------------------------
 
 RC = Temp_factor.*k_sed.*C_organic.*rho.*((1-poros)./(12)); % molCorg/cm3/yr mineralization rate
@@ -379,36 +396,53 @@ hold on
 
 % Solving ODE
 
+% if Bioturbtop == 0
+% 
+% x = linspace(0,Lbottom,n);
+% CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+% C_organic = CorgInit.*exp(-cumsum((Temp_factor.*k_sed)./v_burial.*dz_sed));
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% else 
+% 
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+% sol = bvp4c(@organicODE,@organicbc,solinit);
+% 
+% x = linspace(0,Lbottom,n);
+% 
+% y = deval(sol,x);
+% 
+% if min(y) < 0
+%     fprintf('Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+% 
+% 
+% C_organic = y(1,:);
+% 
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% end
 if Bioturbtop == 0
-
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit.*exp(-cumsum((Temp_factor.*k_sed)./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
-else 
-
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-
-x = linspace(0,Lbottom,n);
-
-y = deval(sol,x);
-
-if min(y) < 0
-    fprintf('Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    x = linspace(0,Lbottom,n);
+    C_organic = Corg_top .* exp(-cumsum((Temp_factor .* k_sed) ./ v_burial .* dz_sed));
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
+else
+    nmesh = 1000;
+    x = linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh), [Corg_top 0]);
+    sol = bvp4c(@organicODE, @organicbc, solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    C_organic = y(1,:);
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 end
-y = max(y, 1e-12);
-
-
-C_organic = y(1,:);
-
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
-end
-
 % ---------------------------- OXYGEN -------------------------------------
 
 RC = Temp_factor.*k_sed.*C_organic.*rho.*((1-poros)./(12)) + RC_root; % molCorg/cm3/yr mineralization rate
@@ -738,266 +772,266 @@ R_ALK_DIC = F_diff./F_diff_DIC;
 F_diff_CH4 = DCH4.*((CH4(1,2) - CH4(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 
-% ----------------------------- OUTPUT PACKAGING ---------------------------
-    Outputs.z_sed = z_sed;
-    Outputs.pH_profile = pH;
-    Outputs.CH4_profile = CH4;
-    Outputs.O2_profile = Oxygen;
-%     Outputs.SO4_profile = Sulfate;
-%     Outputs.DIC_profile = C_DIC;
-
-    % Core Diagnostics
-    Outputs.Max_CH4 = max(CH4);
-
-
-    Outputs.Org_Bottom = C_organic(end) * 100; % %gDw
-    Outputs.ALK_Bottom = ALK(end);             % uM
-    Outputs.pH_Bottom  = pH(end);              % 
-    Outputs.CH4_Bottom = CH4(end);             % uM
-%     Outputs.Org_Top    = C_organic(1) * 100; % %gDw
-
-    % OPD: O2 < 1 uM
-    idx_O2 = find(Oxygen < 1, 1);
-    if isempty(idx_O2), Outputs.OPD = z_sed(end); else, Outputs.OPD = z_sed(idx_O2); end
-
-    % SO4_Depth: SO4 降至 < 10 uM
-    idx_SO4 = find(Sulfate < 10, 1);
-    if isempty(idx_SO4), Outputs.SO4_Depth = z_sed(end); else, Outputs.SO4_Depth = z_sed(idx_SO4); end
-
-
-    idx_top5 = (z_sed <= 5);                   % 圈定 0-5 cm 网格
-    idx_bot5 = (z_sed >= (Lbottom - 5));       % 圈定底部 5 cm 网格
-    
-    Outputs.ALK_Bot5   = mean(ALK(idx_bot5));             % 底层 5cm 平均碱度
-    Outputs.Sigma_Top5 = mean(sigma_carb(idx_top5));      % 表层 5cm 平均饱和度 (Omega-1)
-    Outputs.CaCO3_Top5 = mean(CaCO3(idx_top5)) * 100;     % 表层 5cm 平均 CaCO3 (%gDw)
-    Outputs.Integ_Meth = trapz(z_sed, Rate_Meth);         %integrated Rate_Meth
-    
-%     % CH4_Onset_Depth: CH4 超过 10 uM 的深度
-%     idx_CH4 = find(CH4 > 10, 1);
-%     if isempty(idx_CH4), Outputs.CH4_Onset = z_sed(end); else, Outputs.CH4_Onset = z_sed(idx_CH4); end
+% % ----------------------------- OUTPUT PACKAGING ---------------------------
+%     Outputs.z_sed = z_sed;
+%     Outputs.pH_profile = pH;
+%     Outputs.CH4_profile = CH4;
+%     Outputs.O2_profile = Oxygen;
+% %     Outputs.SO4_profile = Sulfate;
+% %     Outputs.DIC_profile = C_DIC;
+% 
+%     % Core Diagnostics
+%     Outputs.Max_CH4 = max(CH4);
+% 
+% 
+%     Outputs.Org_Bottom = C_organic(end) * 100; % %gDw
+%     Outputs.ALK_Bottom = ALK(end);             % uM
+%     Outputs.pH_Bottom  = pH(end);              % 
+%     Outputs.CH4_Bottom = CH4(end);             % uM
+% %     Outputs.Org_Top    = C_organic(1) * 100; % %gDw
+% 
+%     % OPD: O2 < 1 uM
+%     idx_O2 = find(Oxygen < 1, 1);
+%     if isempty(idx_O2), Outputs.OPD = z_sed(end); else, Outputs.OPD = z_sed(idx_O2); end
+% 
+%     % SO4_Depth: SO4 降至 < 10 uM
+%     idx_SO4 = find(Sulfate < 10, 1);
+%     if isempty(idx_SO4), Outputs.SO4_Depth = z_sed(end); else, Outputs.SO4_Depth = z_sed(idx_SO4); end
+% 
+% 
+%     idx_top5 = (z_sed <= 5);                   % 圈定 0-5 cm 网格
+%     idx_bot5 = (z_sed >= (Lbottom - 5));       % 圈定底部 5 cm 网格
 %     
-%     % Sigma0_Depth: 碳酸钙饱和度 Omega-1 穿过 0 的深度 (>= 0)
-%     idx_sigma = find(sigma_carb >= 0, 1);
-%     if isempty(idx_sigma), Outputs.Sigma0_Depth = z_sed(end); else, Outputs.Sigma0_Depth = z_sed(idx_sigma); end
+%     Outputs.ALK_Bot5   = mean(ALK(idx_bot5));             % 底层 5cm 平均碱度
+%     Outputs.Sigma_Top5 = mean(sigma_carb(idx_top5));      % 表层 5cm 平均饱和度 (Omega-1)
+%     Outputs.CaCO3_Top5 = mean(CaCO3(idx_top5)) * 100;     % 表层 5cm 平均 CaCO3 (%gDw)
+%     Outputs.Integ_Meth = trapz(z_sed, Rate_Meth);         %integrated Rate_Meth
 %     
-%     % CaCO3_Front_Depth: 碳酸钙开始显著积累的深度 (设定阈值为 1e-4，即脱离初始极小值)
-%     idx_CaCO3 = find(CaCO3 > 1e-4, 1);
-%     if isempty(idx_CaCO3), Outputs.CaCO3_Front = z_sed(end); else, Outputs.CaCO3_Front = z_sed(idx_CaCO3); end
+% %     % CH4_Onset_Depth: CH4 超过 10 uM 的深度
+% %     idx_CH4 = find(CH4 > 10, 1);
+% %     if isempty(idx_CH4), Outputs.CH4_Onset = z_sed(end); else, Outputs.CH4_Onset = z_sed(idx_CH4); end
+% %     
+% %     % Sigma0_Depth: 碳酸钙饱和度 Omega-1 穿过 0 的深度 (>= 0)
+% %     idx_sigma = find(sigma_carb >= 0, 1);
+% %     if isempty(idx_sigma), Outputs.Sigma0_Depth = z_sed(end); else, Outputs.Sigma0_Depth = z_sed(idx_sigma); end
+% %     
+% %     % CaCO3_Front_Depth: 碳酸钙开始显著积累的深度 (设定阈值为 1e-4，即脱离初始极小值)
+% %     idx_CaCO3 = find(CaCO3 > 1e-4, 1);
+% %     if isempty(idx_CaCO3), Outputs.CaCO3_Front = z_sed(end); else, Outputs.CaCO3_Front = z_sed(idx_CaCO3); end
+% 
+% 
+% %     % Methane Appearance Depth (Depth where CH4 > 5 uM)
+% %     ch4_idx = find(CH4 > 5, 1);
+% %     if isempty(ch4_idx)
+% %         Outputs.CH4_Depth = Lbottom; % No significant methane
+% %     else
+% %         Outputs.CH4_Depth = z_sed(ch4_idx);
+% %     end
+% % 
+% %     Outputs.Convergence_Status = K_converge;
+% 
+
+% end % End of Function
 
 
-%     % Methane Appearance Depth (Depth where CH4 > 5 uM)
-%     ch4_idx = find(CH4 > 5, 1);
-%     if isempty(ch4_idx)
-%         Outputs.CH4_Depth = Lbottom; % No significant methane
-%     else
-%         Outputs.CH4_Depth = z_sed(ch4_idx);
-%     end
-% 
-%     Outputs.Convergence_Status = K_converge;
+% -------------------------------------------------------------------------
+% ----------------------------- PLOTS -------------------------------------
+clf;
+n_plot = 6; % number of plots in each row
+m_plot = 3; % number of total rows
 
 
-end % End of Function
+% Organic
+
+subplot(m_plot,n_plot,1);
+
+% plot((C_organic + POC_root).*100,z_sed,'lineWidth',2); axis ij
+plot((C_organic ).*100,z_sed,'lineWidth',2); axis ij
+title('Organic (%gDw)')
+ylabel('Depth (cm)');
+box on
 
 
-% % -------------------------------------------------------------------------
-% % ----------------------------- PLOTS -------------------------------------
-% clf;
-% n_plot = 6; % number of plots in each row
-% m_plot = 3; % number of total rows
-% 
-% 
-% % Organic
-% 
-% subplot(m_plot,n_plot,1);
-% 
-% % plot((C_organic + POC_root).*100,z_sed,'lineWidth',2); axis ij
-% plot((C_organic ).*100,z_sed,'lineWidth',2); axis ij
-% title('Organic (%gDw)')
-% ylabel('Depth (cm)');
-% box on
-% 
-% 
-% % Oxygen
-% 
-% subplot(m_plot,n_plot,2);
-% 
-% plot(Oxygen,z_sed,'lineWidth',2); axis ij
-% title('[O_2] (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Iron
-% 
-% subplot(m_plot,n_plot,3);
-% 
-% plot(C_Fe,z_sed,'lineWidth',2); axis ij
-% title('[Fe^{2+}] (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Sulfate
-% 
-% subplot(m_plot,n_plot,4);
-% 
-% plot(Sulfate,z_sed,'lineWidth',2); axis ij
-% title('[SO_4] (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Sulfide
-% 
-% subplot(m_plot,n_plot,5);
-% 
-% plot(C_HS,z_sed,'lineWidth',2); axis ij
-% title('[H_2S] (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Methane
-% 
-% subplot(m_plot,n_plot,6);
-% 
-% plot(CH4,z_sed,'lineWidth',2); axis ij
-% title('[CH_4] (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % CaCO3
-% 
-% subplot(m_plot,n_plot,7);
-% 
-% % plot(CaCO3.*(1E-5.*(poros2./(1-poros2)).*(1./rho)),z_sed,'lineWidth',2); axis ij
-% plot(CaCO3.*100,z_sed,'lineWidth',2); axis ij
-% title('CaCO3')
-% ylabel('Depth (cm)');
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % DIC
-% 
-% subplot(m_plot,n_plot,8);
-% 
-% plot(C_DIC,z_sed,'lineWidth',2); axis ij
-% title('DIC (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % ALK
-% 
-% subplot(m_plot,n_plot,9);
-% 
-% plot(C_alka,z_sed,'lineWidth',2); axis ij
-% title('ALK (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Carbonic Acid
-% 
-% subplot(m_plot,n_plot,10);
-% 
-% plot(C_H2CO3,z_sed,'lineWidth',2); axis ij
-% title('Carb Acid (\muM)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % pH
-% subplot(m_plot,n_plot,11);
-% 
-% plot(pH,z_sed,'lineWidth',2); axis ij
-% title('pH')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Organic degradation rate
-% 
-% subplot(m_plot,n_plot,12);
-% 
-% plot(RC.* 1E9,z_sed,'lineWidth',2); axis ij  %umol/l/year
-% title('Mineralization Rate (\mumol/l/year)')
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Burial efficiency of Organic
-% 
-% subplot(m_plot,n_plot,13);
-% plot(BEsed_org.*100,z_sed,'lineWidth',2); axis ij  %umol/l/year
-% title('OM Burial Efficiency')
-% ylabel('Depth (cm)');
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Aerobic respiration and sulfate reduction rates
-% 
-% % subplot(m_plot,n_plot,14);
-% % plot(R_SRR,z_sed,R_respi,z_sed,'lineWidth',2); axis ij %umol/l/year
-% % title('Rate (\mumol/l/year)')
-% % legend('Sulfate Red','Aerobic Resp');
-% 
-% 
+% Oxygen
+
+subplot(m_plot,n_plot,2);
+
+plot(Oxygen,z_sed,'lineWidth',2); axis ij
+title('[O_2] (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Iron
+
+subplot(m_plot,n_plot,3);
+
+plot(C_Fe,z_sed,'lineWidth',2); axis ij
+title('[Fe^{2+}] (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Sulfate
+
+subplot(m_plot,n_plot,4);
+
+plot(Sulfate,z_sed,'lineWidth',2); axis ij
+title('[SO_4] (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Sulfide
+
+subplot(m_plot,n_plot,5);
+
+plot(C_HS,z_sed,'lineWidth',2); axis ij
+title('[H_2S] (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Methane
+
+subplot(m_plot,n_plot,6);
+
+plot(CH4,z_sed,'lineWidth',2); axis ij
+title('[CH_4] (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% CaCO3
+
+subplot(m_plot,n_plot,7);
+
+% plot(CaCO3.*(1E-5.*(poros2./(1-poros2)).*(1./rho)),z_sed,'lineWidth',2); axis ij
+plot(CaCO3.*100,z_sed,'lineWidth',2); axis ij
+title('CaCO3')
+ylabel('Depth (cm)');
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% DIC
+
+subplot(m_plot,n_plot,8);
+
+plot(C_DIC,z_sed,'lineWidth',2); axis ij
+title('DIC (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% ALK
+
+subplot(m_plot,n_plot,9);
+
+plot(C_alka,z_sed,'lineWidth',2); axis ij
+title('ALK (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Carbonic Acid
+
+subplot(m_plot,n_plot,10);
+
+plot(C_H2CO3,z_sed,'lineWidth',2); axis ij
+title('Carb Acid (\muM)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% pH
+subplot(m_plot,n_plot,11);
+
+plot(pH,z_sed,'lineWidth',2); axis ij
+title('pH')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Organic degradation rate
+
+subplot(m_plot,n_plot,12);
+
+plot(RC.* 1E9,z_sed,'lineWidth',2); axis ij  %umol/l/year
+title('Mineralization Rate (\mumol/l/year)')
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Burial efficiency of Organic
+
+subplot(m_plot,n_plot,13);
+plot(BEsed_org.*100,z_sed,'lineWidth',2); axis ij  %umol/l/year
+title('OM Burial Efficiency')
+ylabel('Depth (cm)');
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Aerobic respiration and sulfate reduction rates
+
+% subplot(m_plot,n_plot,14);
+% plot(R_SRR,z_sed,R_respi,z_sed,'lineWidth',2); axis ij %umol/l/year
+% title('Rate (\mumol/l/year)')
+% legend('Sulfate Red','Aerobic Resp');
+
+
+subplot(m_plot,n_plot,15);
+plot((0.5.*R_SRR)./365,z_sed,'lineWidth',2); axis ij %umol/l/year
+title('Sulfate Reduction Rate (nmol/cm3/d)')
+% legend('Sulfate Red');
+
+box on
+grid on
+
+ax.LineWidth = 2;
+
+% Carbonate saturation index
+
 % subplot(m_plot,n_plot,15);
-% plot((0.5.*R_SRR)./365,z_sed,'lineWidth',2); axis ij %umol/l/year
-% title('Sulfate Reduction Rate (nmol/cm3/d)')
-% % legend('Sulfate Red');
+% 
+% plot(sigma_carb(iteration-1,:),z_sed,'lineWidth',2); axis ij  %umol/l/year
+% title('Caclite saturation (\Omega - 1)')
 % 
 % box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% % Carbonate saturation index
-% 
-% % subplot(m_plot,n_plot,15);
-% % 
-% % plot(sigma_carb(iteration-1,:),z_sed,'lineWidth',2); axis ij  %umol/l/year
-% % title('Caclite saturation (\Omega - 1)')
-% % 
-% % box on
-% 
-% 
-% subplot(m_plot,n_plot,17);
-% 
-% plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
-% title('Calciite saturation (\Omega - 1)')
-% 
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
-% 
-% subplot(m_plot,n_plot,18);
-% 
-% plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
-% title('Fe(III) (\mumol/gr)')
-% 
-% box on
-% grid on
-% 
-% ax.LineWidth = 2;
+
+
+subplot(m_plot,n_plot,17);
+
+plot(sigma_carb(end,:),z_sed,'lineWidth',2); axis ij
+title('Calciite saturation (\Omega - 1)')
+
+box on
+grid on
+
+ax.LineWidth = 2;
+
+subplot(m_plot,n_plot,18);
+
+plot(FeooH(1,:),z_sed,'lineWidth',2); axis ij
+title('Fe(III) (\mumol/gr)')
+
+box on
+grid on
+
+ax.LineWidth = 2;
 
 % Mineral saturation indices
 % 
