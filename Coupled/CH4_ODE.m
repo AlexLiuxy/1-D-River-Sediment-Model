@@ -13,7 +13,7 @@ SO4 = interp1(z_sed,Sulfate,x);
 % Inh = (k_O2./(O2+k_O2));
 % Inh1 = (k_SO4./(SO4+k_SO4));
 
-RC1 = interp1(z_sed,RC,x);
+% RC1 = interp1(z_sed,RC,x);
 
 R_Meth_current = double(interp1(z_sed, Rate_Meth, x));
 

@@ -17,7 +17,9 @@ tic
 global v_burial Mineral_Mass z_sed KFe_HS Oxygen Sulfate
 global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox Iron_conc Bioturb Calcium DHCO3 HCO3init 
 global O2init SO4init HSinit C_organic rho poros RC Alpha_Bioirrig
-global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS R_iron R_FeOx Fe_3_init
+%global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS R_iron R_FeOx Fe_3_init
+global R_respi R_SRR R_FeRed RC_after_O2 RC_after_Fe Rate_Meth...
+       Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS R_iron R_FeOx Fe_3_init Corg_top
 global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit Iron_C R_HS_Ox kapatite P_apaeq R1_carb_disso R1_carb_form
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor T_future
@@ -101,7 +103,7 @@ global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_c
     
     T_future        = Config.T_future;
 
-
+    Corg_top = Config.Corg_top;
 
     BE = Config.BE;
     NPP = Config.NPP;
@@ -166,13 +168,29 @@ global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_c
 [~, CO3_top, ~] = River_Carbonate(HCO3init, DICinit, T_future, 0.1, 1); 
 % CO3_top = Carb_CO3(HCO3init,DICinit); % bottom water pH based on DIC and ALK top boundary
 CO3_1 = CO3_top*ones(1,n);
-C_HS  = zeros(1,n); %intial value for sulfide
-R_HS_Ox = zeros(1,n);
-CaCO3 = 1E5.*zeros(1,n);
-Rapat = zeros(1,n);
-Rviv1 = zeros(1,n); %umol/Lsed/yr
-R_FeS = ones(1,n); %umol/Lsed/yr
-pH    = 7.*ones(1,n);
+% C_HS  = zeros(1,n); %intial value for sulfide
+% R_HS_Ox = zeros(1,n);
+% CaCO3 = 1E5.*zeros(1,n);
+% Rapat = zeros(1,n);
+% Rviv1 = zeros(1,n); %umol/Lsed/yr
+% R_FeS = ones(1,n); %umol/Lsed/yr
+% pH    = 7.*ones(1,n);
+
+C_HS        = zeros(1,n);
+Sulfate     = SO4init .* ones(1,n);
+R_HS_Ox     = zeros(1,n);
+CaCO3       = 1E5 .* zeros(1,n);
+Rapat       = zeros(1,n);
+Rviv1       = zeros(1,n);
+R_FeS       = ones(1,n);
+R_respi     = zeros(1,n);
+R_FeRed     = zeros(1,n);
+R_SRR       = zeros(1,n);
+Rate_Meth   = zeros(1,n);
+RC_after_O2 = zeros(1,n);
+RC_after_Fe = zeros(1,n);
+pH          = 7 .* ones(1,n);
+
 
 % ----------------------- Correcting organic matter reactivity based on oxygen penetration depth ----------------
 % After calculating the oxygen penetration depth, reactivity profiles would
@@ -184,30 +202,49 @@ hold on
 
 % Solving ODE
 
+% if Bioturbtop == 0
+% 
+% x = linspace(0,Lbottom,n);
+% CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+% C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% else 
+% 
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+% sol = bvp4c(@organicODE,@organicbc,solinit);
+% x = linspace(0,Lbottom,n);
+% y = deval(sol,x);
+% 
+% if min(y) < 0
+%     fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+% 
+% C_organic = y(1,:);
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% end
+
 if Bioturbtop == 0
-
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
-else 
-
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-x = linspace(0,Lbottom,n);
-y = deval(sol,x);
-
-if min(y) < 0
-    fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
-end
-y = max(y, 1e-12);
-
-C_organic = y(1,:);
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
+    x = linspace(0,Lbottom,n);
+    C_organic = Corg_top .* exp(-cumsum((Temp_factor .* k_sed) ./ v_burial .* dz_sed));
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
+else
+    nmesh = 1000;
+    x = linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh), [Corg_top 0]);
+    sol = bvp4c(@organicODE, @organicbc, solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    C_organic = y(1,:);
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 end
 
 % ---------------------------- OXYGEN -------------------------------------
@@ -368,34 +405,52 @@ hold on
 
 % Solving ODE
 
+% if Bioturbtop == 0
+% 
+% x = linspace(0,Lbottom,n);
+% CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+% C_organic = CorgInit.*exp(-cumsum((Temp_factor.*k_sed)./v_burial.*dz_sed));
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% else 
+% 
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+% sol = bvp4c(@organicODE,@organicbc,solinit);
+% 
+% x = linspace(0,Lbottom,n);
+% 
+% y = deval(sol,x);
+% 
+% if min(y) < 0
+%     fprintf('Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+% 
+% 
+% C_organic = y(1,:);
+% 
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+% 
+% end
 if Bioturbtop == 0
-
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit.*exp(-cumsum((Temp_factor.*k_sed)./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
-else 
-
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-
-x = linspace(0,Lbottom,n);
-
-y = deval(sol,x);
-
-if min(y) < 0
-    fprintf('Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
-end
-y = max(y, 1e-12);
-
-
-C_organic = y(1,:);
-
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
+    x = linspace(0,Lbottom,n);
+    C_organic = Corg_top .* exp(-cumsum((Temp_factor .* k_sed) ./ v_burial .* dz_sed));
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
+else
+    nmesh = 1000;
+    x = linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh), [Corg_top 0]);
+    sol = bvp4c(@organicODE, @organicbc, solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    C_organic = y(1,:);
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 end
 
 % ---------------------------- OXYGEN -------------------------------------
@@ -422,7 +477,9 @@ y = max(y, 1e-12);
 C_O2 = y(1,:);
 Oxygen = C_O2;
 
-R_respi = RC.* (Oxygen./(Oxygen+k_O2)).*1E9; %rate of aerobic respiration umol/l/year
+R_respi = RC.* (Oxygen./(Oxygen+k_O2)).*1E9; %rate of aerobic respiration umol/l/year % oxic respiration
+RC_after_O2 = max(RC .* 1E9 - R_respi, 0);            % residual C after O2
+R_FeRed = 4 .* RC_after_O2 .* (FeooH ./ (FeooH + KFEMonod));   % provisional Fe reduction
 
 % ------------------------ IRON(II) ---------------------------------------
  
@@ -455,9 +512,16 @@ F_diff_Fe(1,count_loop) = DH2S.*((C_Fe(1,2) - C_Fe(1,1))./(x(1,2)-x(1,1)))*1E-3;
 
 % ------------------------ IRON(III) ---------------------------------------
 
-Inhib = (k_O2./(Oxygen+k_O2)); % inhibition term for sulfate reduction by oxic respiration
-R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
-R_FeOx = (kFeOx.*C_Fe.*Oxygen);
+% Inhib = (k_O2./(Oxygen+k_O2)); % inhibition term for sulfate reduction by oxic respiration
+% R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
+% R_FeOx = (kFeOx.*C_Fe.*Oxygen);
+
+R_FeRed = 4 .* RC_after_O2 .* (FeooH ./ (FeooH + KFEMonod));   % refresh with current FeooH
+R_iron(count_loop,:) = R_FeRed;                                % diagnostic only
+R_FeOx = (kFeOx .* C_Fe .* Oxygen);
+
+RC_after_Fe = max(RC_after_O2 - R_FeRed ./ 4, 0);             % residual C after Fe reduction
+
 R_FeOx_1(count_loop,:) = R_FeOx;
 % Fe_3_init  = 365.*1E2.*(F_FeOx)./(v_burial(1));  %umol/l
 Fe_3_init = 36.5.*(F_FeOx).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %umol/l
@@ -505,7 +569,8 @@ y = max(y, 1e-12);
 C_SO4 = y(1,:);
 Sulfate = C_SO4;
 
-R_SRR = RC.*Inhib.* (Sulfate./(Sulfate+k_SO4)).*1E9; %rate of sulfate reduction umol/l/year
+% R_SRR = RC.*Inhib.* (Sulfate./(Sulfate+k_SO4)).*1E9; %rate of sulfate reduction umol/l/year
+R_SRR = RC_after_Fe .* (Sulfate ./ (Sulfate + k_SO4));   % C oxidation routed to sulfate reduction
 
 % ------------------------ SULFIDE ---------------------------------------
 
@@ -548,8 +613,8 @@ end
 
 R_FeS = kFeS.*C_Fe.*C_HS;
 
-R_FeS_1(count_loop,:) = R_FeS;
-R_FeS_store(iteration,:) = R_FeS;
+% R_FeS_1(count_loop,:) = R_FeS;
+% R_FeS_store(iteration,:) = R_FeS;
 
 for i=1:n
   if R_FeS(1,i) < 0
@@ -564,14 +629,14 @@ F_diff_HS = DH2S.*((C_HS(1,2) - C_HS(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 %XL calculating inhibition
 
-Inhib_O2_meth  = (k_O2 ./ (Oxygen + k_O2));
-Inhib_Fe_meth  = (KFEMonod ./ (FeooH + KFEMonod));
-Inhib_SO4_meth = (k_SO4 ./ (Sulfate + k_SO4));
+% Inhib_O2_meth  = (k_O2 ./ (Oxygen + k_O2));
+% Inhib_Fe_meth  = (KFEMonod ./ (FeooH + KFEMonod));
+% Inhib_SO4_meth = (k_SO4 ./ (Sulfate + k_SO4));
+%  
+% 
+% Rate_Meth= 0.5 .* RC .* Inhib_O2_meth .* Inhib_Fe_meth .* Inhib_SO4_meth .* 1E9;
 
-global Rate_Meth
- 
-
-Rate_Meth= 0.5 .* RC .* Inhib_O2_meth .* Inhib_Fe_meth .* Inhib_SO4_meth .* 1E9;
+Rate_Meth = 0.5 .* max(RC_after_Fe - R_SRR, 0);   % residual C goes to methanogenesis
 
 % Solving ODE
 
