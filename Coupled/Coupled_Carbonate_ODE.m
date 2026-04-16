@@ -8,22 +8,18 @@ global v_burial_Fluid v_burial z_sed poros rho
 global k_calcite k_calcite_dis1 k_calcite_dis2 n_power_CaCO31 n_power_CaCO32 n_power_CaCO33
 global Calcium Calcium_activity CO3_activity Ksp_ca
 global Rate_Meth T_future R_FeS
-% global R_HS_Ox R_SRR kFeS C_Fe C_HS 
+global R_HS_Ox R_SRR R_DIC_prod R_ALK_prod Salinity
     
     v_burial_f = double(interp1(z_sed, v_burial_Fluid, x));
     v_burial_s = double(interp1(z_sed, v_burial, x)); 
     fi = double(interp1(z_sed, poros, x));
     Alpha_Bioirrig_1 = double(interp1(z_sed, Alpha_Bioirrig, x));
     
-    RC1 = double(interp1(z_sed, RC, x));
-%     R_SRR1 = double(interp1(z_sed, R_SRR, x));
-% 
-%     R_HS_Ox_1 = double(interp1(z_sed, R_HS_Ox, x));
-
-R_FeS_1   = double(interp1(z_sed, R_FeS, x));
-
-%     C_Fe_1 = double(interp1(z_sed, C_Fe, x));
-%     C_HS_1 = double(interp1(z_sed, C_HS, x));
+R_DIC_prod_1 = double(interp1(z_sed, R_DIC_prod, x));
+R_SRR1       = double(interp1(z_sed, R_SRR, x));
+R_HS_Ox_1    = double(interp1(z_sed, R_HS_Ox, x));
+R_FeS_1      = double(interp1(z_sed, R_FeS, x));
+R_ALK_prod_1 = double(interp1(z_sed, R_ALK_prod, x));
 
     
     DIC = max(real(Y(1)), 1e-12);
@@ -31,7 +27,7 @@ R_FeS_1   = double(interp1(z_sed, R_FeS, x));
     CaCO3 = max(real(Y(5)), 0);
 
     % calculate real time CO3
-    [~, CO3_current, ~] = River_Carbonate(ALK, DIC, T_future, 0.1, 1); 
+    [~, CO3_current, ~] = River_Carbonate(ALK, DIC, T_future, Salinity, 1); 
 
     if isempty(CO3_current) || isnan(CO3_current)
         CO3_current = 1e-12;
@@ -52,27 +48,18 @@ R_FeS_1   = double(interp1(z_sed, R_FeS, x));
 
     
     % account for DIC loss in methanogenesis
-    R_Meth_current = double(interp1(z_sed, Rate_Meth, x)); 
+%     R_Meth_current = double(interp1(z_sed, Rate_Meth, x)); 
     
     
-Advection_DIC = v_burial_f .* (Y(2) / (fi * DHCO3));
-    % Advection_DIC = v_burial_f .* Y(2) ;
-
-    NR_DIC = Advection_DIC - (RC1*1E9-R_Meth_current) + R1_carb_total - (Alpha_Bioirrig_1*(DICinit - DIC));
+    Advection_DIC = v_burial_f .* (Y(2) / (fi * DHCO3));
+NR_DIC = Advection_DIC ...
+       - R_DIC_prod_1 ...
+       + R1_carb_total ...
+       - (Alpha_Bioirrig_1 * (DICinit - DIC));
     
     Advection_ALK = v_burial_f .* (Y(4) / (fi * DHCO3));
-%     NR_ALK = Advection_ALK - 2*(kFeS*C_Fe_1*C_HS_1) + 2*R1_carb_total - (Alpha_Bioirrig_1*(HCO3init - ALK));
-    
-%     eta_s = 1;   
-%     
-%     Net_S_term = eta_s * ( R_SRR1 ...
-%                          - 2*(kFeS*C_Fe_1*C_HS_1) ...
-%                          - R_HS_Ox_1 );
-% 
-% 
-%     NR_ALK = Advection_ALK +Net_S_term + 2*R1_carb_total - (Alpha_Bioirrig_1*(HCO3init - ALK));
-   NR_ALK = Advection_ALK ...
-       - 2 * R_FeS_1 ...
+NR_ALK = Advection_ALK ...
+       - R_ALK_prod_1 ...
        + 2 * R1_carb_total ...
        - (Alpha_Bioirrig_1 * (HCO3init - ALK));
 

@@ -11,15 +11,17 @@
 % RUN_RTM_1D
 % Sediment Diagenesis Model - Functionized for Sensitivity Analysis
 clear all
+tic
 % ----------------------------- INPUT PARAMETERS ---------------------------
 
 global v_burial Mineral_Mass z_sed Oxygen Sulfate Corg_top
 global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox  Bioturb Calcium DHCO3 HCO3init 
 global O2init SO4init HSinit C_organic rho poros RC Alpha_Bioirrig
-global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS  R_FeOx Fe_3_init
-global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_Ox kapatite 
+global R_respi R_SRR R_FeRed RC_after_Fe R_DIC_prod R_ALK_prod R_AOM R_CH4Ox Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS  R_FeOx Fe_3_init
+global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_Ox kapatite
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
-global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor T_future
+global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor 
+global T_future Rate_Meth Salinity pH K_HS R_AOM_lag
 %global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
     
 
@@ -106,11 +108,7 @@ global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_c
     HSinit          = Config.HSinit;
     Pinitial        = Config.Pinitial;
     
-    BE              = Config.BE;
-    NPP             = Config.NPP;
-    F_CaCO3         = Config.F_CaCO3;
-    
-    T_future        = Config.T_future;
+
 
 
 Corg_top = Config.Corg_top;
@@ -124,6 +122,8 @@ Corg_top = Config.Corg_top;
     F_CaCO3 = Config.F_CaCO3;
 
     T_future = Config.T_future;
+
+    Salinity = Config.Salinity;
     ageinit  = Config.ageinit;
     age_root = Config.age_root;
 
@@ -174,7 +174,7 @@ Corg_top = Config.Corg_top;
 
 % ----------------------- Initial Carbonate concentration -----------------
 
-[~, CO3_top, ~] = River_Carbonate(HCO3init, DICinit, T_future, 0.1, 1); 
+[pH_top, CO3_top, ~] = River_Carbonate(HCO3init, DICinit, T_future, Salinity, 1); 
 % CO3_top = Carb_CO3(HCO3init,DICinit); % bottom water pH based on DIC and ALK top boundary
 CO3_1 = CO3_top*ones(1,n);
 C_HS  = zeros(1,n); %intial value for sulfide
@@ -183,8 +183,8 @@ CaCO3 = 1E5.*zeros(1,n);
 Rapat = zeros(1,n);
 Rviv1 = zeros(1,n); %umol/Lsed/yr
 R_FeS = ones(1,n); %umol/Lsed/yr
-pH    = 7.*ones(1,n);
-
+pH    = pH_top.*ones(1,n);
+R_AOM_lag = zeros(1,n);
 % ----------------------- Correcting organic matter reactivity based on oxygen penetration depth ----------------
 % After calculating the oxygen penetration depth, reactivity profiles would
 % be corrected using oxic and anoxic power law by Katsev & Crowe (2015).
@@ -296,11 +296,23 @@ FeooH = max(FeOx, 1e-12);
 % ---------------------------- CORRECTING ACTIVITY PROFILES ---------------
 b_oxic = 0.95;%0.977;
 a_oxic = 0.81;%0.312;
-b_anoxic = 0.95;%0.857;
-a_anoxic = 0.81;%1.1;
-k_sed(1,1:num_OPD) = 10.^(-b_oxic*log10(age(1,1:num_OPD)) - a_oxic);  % Oxic
-k_sed(1,(num_OPD+1):n) = 10.^(-b_anoxic*log10(age(1,(num_OPD+1):n)) - a_anoxic);  % Anoxic
 
+
+% b_anoxic = 0.95;%0.857;
+% a_anoxic = 0.81;%1.1;
+
+% slower reactivity decay below OPD
+b_anoxic = 0.75;
+a_anoxic = 0.60;
+% k_sed(1,1:num_OPD) = 10.^(-b_oxic*log10(age(1,1:num_OPD)) - a_oxic);  % Oxic
+% k_sed(1,(num_OPD+1):n) = 10.^(-b_anoxic*log10(age(1,(num_OPD+1):n)) - a_anoxic);  % Anoxic
+k_oxic   = 10.^(-b_oxic  .* log10(age) - a_oxic);
+k_anoxic = 10.^(-b_anoxic .* log10(age) - a_anoxic);
+
+transition_width = 0.5;   % cm
+w_oxic = 1 ./ (1 + exp((z_sed - OPD) ./ transition_width));
+
+k_sed = w_oxic .* k_oxic + (1 - w_oxic) .* k_anoxic;
 
 % ------------------- Blue Carbon ------------------------------------
 
@@ -395,7 +407,7 @@ hold on
 
 
 % Solving ODE
-
+% 
 % if Bioturbtop == 0
 % 
 % x = linspace(0,Lbottom,n);
@@ -485,7 +497,14 @@ else
     num_OPD = num_OPD1(1);
 end
 
-R_respi = RC.* (Oxygen./(Oxygen+k_O2)).*1E9; %rate of aerobic respiration umol/l/year
+R_respi = RC .* (Oxygen ./ (Oxygen + k_O2)) .* 1E9;   % umol/L/yr
+
+% residual-carbon cascade: O2 first, then Fe, then SO4, then CH4
+RC_total_uM = RC .* 1E9;                              % umol C / L / yr
+RC_after_O2 = max(RC_total_uM - R_respi, 0);
+
+% Fe reduction uses only carbon left after aerobic respiration
+R_FeRed = 4 .* RC_after_O2 .* (FeooH ./ (FeooH + KFEMonod));   % umol Fe2+/L/yr
 
 % ------------------------ IRON(II) ---------------------------------------
  
@@ -520,33 +539,55 @@ C_Fe = y(1,:);
 
 Inhib = (k_O2./(Oxygen+k_O2)); % inhibition term for sulfate reduction by oxic respiration
 % R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
-R_FeOx = (kFeOx.*C_Fe.*Oxygen);
-% R_FeOx_1(count_loop,:) = R_FeOx;
-% Fe_3_init  = 365.*1E2.*(F_FeOx)./(v_burial(1));  %umol/l
-Fe_3_init = 36.5.*(F_FeOx).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %umol/l
+% R_FeOx = (kFeOx.*C_Fe.*Oxygen);
+% % R_FeOx_1(count_loop,:) = R_FeOx;
+% % Fe_3_init  = 365.*1E2.*(F_FeOx)./(v_burial(1));  %umol/l
+% Fe_3_init = 36.5.*(F_FeOx).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %umol/l
+% 
+% % KFEMonod = 2000;
+% 
+% % % Solving ODE
+% 
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[Fe_3_init 0]);
+% sol = bvp4c(@Fe3_ODE,@Fe3_bc,solinit);
+% 
+% x = linspace(0,Lbottom,n);
+% 
+% y = deval(sol,x);
+% 
+% if min(y) < 0
+%     fprintf('Fe3：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+% 
+% C_Fe_3 = y(1,:);
+% FeooH = C_Fe_3;
+% % FeooH = max(C_Fe_3, 0.2 .* FeOx);
+% RC_after_Fe = max(RC_after_O2 - R_FeRed ./ 4, 0);   % umol C / L / yr
 
-% KFEMonod = 2000;
+R_FeOx = kFeOx .* C_Fe .* Oxygen;
+Fe_3_init = 36.5 .* F_FeOx .* (poros(1)/(1-poros(1))) / (v_burial(1) * rho);  % umol/g
 
-% % Solving ODE
+% convert dissolved rates to solid-phase Fe(III) update
+R_FeRed_solid = R_FeRed .* (poros ./ max(1 - poros, 1e-6)) .* 1e-3 ./ rho;   % umol/g/yr
+R_FeOx_solid  = R_FeOx  .* (poros ./ max(1 - poros, 1e-6)) .* 1e-3 ./ rho;   % umol/g/yr
 
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[Fe_3_init 0]);
-sol = bvp4c(@Fe3_ODE,@Fe3_bc,solinit);
+FeooH_new = zeros(1,n);
+FeooH_new(1) = Fe_3_init;
 
-x = linspace(0,Lbottom,n);
-
-y = deval(sol,x);
-
-if min(y) < 0
-    fprintf('Fe3：%.2e\n', min(y));
+for i = 2:n
+    dz_local = z_sed(i) - z_sed(i-1);
+    net_local = -R_FeRed_solid(i-1) + R_FeOx_solid(i-1);
+    FeooH_new(i) = max(1e-12, FeooH_new(i-1) + dz_local / max(v_burial(i-1), 1e-6) * net_local);
 end
-y = max(y, 1e-12);
 
-C_Fe_3 = y(1,:);
-FeooH = C_Fe_3;
-% FeooH = max(C_Fe_3, 0.2 .* FeOx);
+FeooH = FeooH_new;
 
+% now recompute Fe reduction using updated Fe(III)
+R_FeRed = 4 .* RC_after_O2 .* (FeooH ./ (FeooH + KFEMonod));
+RC_after_Fe = max(RC_after_O2 - R_FeRed ./ 4, 0);
 % ------------------------ SULFATE ---------------------------------------
 
 % Solving ODE
@@ -568,7 +609,9 @@ y = max(y, 1e-12);
 C_SO4 = y(1,:);
 Sulfate = C_SO4;
 
-R_SRR = RC.*Inhib.* (Sulfate./(Sulfate+k_SO4)).*1E9; %rate of sulfate reduction umol/l/year
+%R_SRR = RC.*Inhib.* (Sulfate./(Sulfate+k_SO4)).*1E9; %rate of sulfate reduction umol/l/year
+
+R_SRR = 0.5 .* RC_after_Fe .* (Sulfate ./ (Sulfate + k_SO4));   % umol SO4/L/yr
 
 % ------------------------ SULFIDE ---------------------------------------
 
@@ -621,23 +664,13 @@ for i=1:n
   end 
 end
 
-% R_HS_Ox = Sulfide(iteration,:).* Oxygen.*Kreox; %rate of sulfide reduction umol/l/year
-% R_HS_Ox = Kreox .* HS_conc .* Oxygen;%XL
-
-% F_diff_HS = DH2S.*((C_HS(1,2) - C_HS(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
+R_HS_Ox = max(Kreox .* HS_conc .* Oxygen, 0);   % umol/L/yr
 
 % ------------------------ METHANE ---------------------------------------
+RC_after_SO4 = max(RC_after_Fe - 2 .* R_SRR, 0);   % umol C/L/yr
 
-%XL calculating inhibition
+Rate_Meth = 0.5 .* RC_after_SO4;                   % umol CH4/L/yr
 
-Inhib_O2_meth  = (k_O2 ./ (Oxygen + k_O2));
-Inhib_Fe_meth  = (KFEMonod ./ (FeooH + KFEMonod));
-Inhib_SO4_meth = (k_SO4 ./ (Sulfate + k_SO4));
-
-global Rate_Meth
- 
-
-Rate_Meth= 0.5 .* RC .* Inhib_O2_meth .* Inhib_Fe_meth .* Inhib_SO4_meth .* 1E9;
 
 % Solving ODE
 
@@ -657,7 +690,14 @@ y = max(y, 1e-12);
 
 C_CH4 = y(1,:);
 CH4 = C_CH4;
+R_AOM   = k_AOM .* CH4 .* (Sulfate ./ (Sulfate + K_CH4_SO4));
+R_CH4Ox = k_aerobic_CH4 .* CH4 .* (Oxygen ./ (Oxygen + K_CH4_O2));
 
+% carbonate ledger must use the same lagged AOM that sulfur ODEs used this iteration
+R_DIC_prod = R_respi + R_FeRed ./ 4 + 2 .* R_SRR + Rate_Meth + R_CH4Ox + R_AOM_lag;
+R_ALK_prod = 0.5 .* R_FeRed + 2 .* R_SRR + 2 .* R_AOM_lag - 2 .* R_FeS - R_HS_Ox;
+
+R_AOM_lag = R_AOM;
 % ------------------------------- Coupled Carbonate -----------------------------------
 
 CaCO3_init = 1E-4.*(F_CaCO3).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %gr/grDw
@@ -689,7 +729,7 @@ F_diff     = DHCO3 .* ((C_alka(1,2) - C_alka(1,1)) ./ (x(1,2) - x(1,1))) * 1E-3;
 for i=1:n
     
 
-           [pH_1(1,i), CO3_1(1,i), C_H2CO3(1,i)] = River_Carbonate(ALK(1,i), C_DIC(1,i), T_future, 0.1, 1);
+           [pH_1(1,i), CO3_1(1,i), C_H2CO3(1,i)] = River_Carbonate(ALK(1,i), C_DIC(1,i), T_future, Salinity, 1);
 
 end
 
@@ -1033,6 +1073,7 @@ grid on
 
 ax.LineWidth = 2;
 
+toc
 % Mineral saturation indices
 % 
 % subplot(m_plot,n_plot,16);

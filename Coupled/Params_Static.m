@@ -5,7 +5,7 @@ function Params = Params_Static()
     Params.rho = 2.73;           % g / cm3
     Params.k_O2 = 2;             % uM
     Params.k_SO4 = 20;           % uM
-    Params.KFEMonod = 200;       % umol / g
+    Params.KFEMonod = 800;%200;       % umol / g
 
     Params.DSO4 = 310;%300;           % cm2 / yr
     Params.DCH4 = 300;           % cm2 / yr
@@ -15,15 +15,15 @@ function Params = Params_Static()
     Params.DPO4  = 400;          % cm2 / yr
 
     Params.Kreox = 500;          % 1 / umol / L / yr
-    Params.kFeOx = 10;           % 1 / umol / L / yr
-    Params.kFeS  = 10;           % 1 / umol / L / yr
+    Params.kFeOx = 10;%10;           % 1 / umol / L / yr
+    Params.kFeS  = 1;%10;           % 1 / umol / L / yr
 
     Params.K_CH4_SO4   = 100;    % uM
     Params.K_CH4_O2    = 1;      % uM
     Params.k_AOM       = 1.0;    % 1 / yr
     Params.k_aerobic_CH4 = 6;    % 1 / yr
 
-    Params.Ksp_ca = 3000;        % uM^2
+    Params.Ksp_ca = 4.5e5;%3000;        % uM^2
     Params.k_calcite = 1;
     Params.k_calcite_dis1 = 0.005;
     Params.k_calcite_dis2 = 10;
@@ -31,8 +31,8 @@ function Params = Params_Static()
     Params.n_power_CaCO32 = 0.11;
     Params.n_power_CaCO33 = 4;
 
-    Params.Calcium_activity = 0.6;
-    Params.CO3_activity     = 0.6;
+    Params.Calcium_activity = 1.0;%0.6;
+    Params.CO3_activity     = 1.0;%0.6;
 
     Params.P_C_ratio = 0.0094;
     Params.Q10   = 2;

@@ -15,7 +15,7 @@ Config.Corg_top = 0.028;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     Config.porosbottom = 0.7;
     Config.porosscale = 3;
 
-    Config.Bioturbtop = 10;       % cm2 / yr
+    Config.Bioturbtop = 1;%10;       % cm2 / yr
     Config.Bioturbbottom = 1;     % cm2 / yr
     Config.bioturbscale = 3;
 
@@ -24,26 +24,27 @@ Config.Corg_top = 0.028;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     Config.Bioirrig_scale = 0.75;
 
     % ---------------- Boundary concentrations ----------------
-    Config.O2init   = 200;%150;        % uM
+    Config.O2init   = 240;%150;        % uM
     Config.SO4init  = 29000;%200;        % uM
-    Config.DICinit  = 2700;%1000;       % uM
-    Config.HCO3init = 2000;%950;        % uM
-    Config.Calcium  = 1000;       % uM
+    Config.DICinit  = 3400;%1000;       % uM
+    Config.HCO3init = 3100;%950;        % uM
+    Config.Calcium  = 11500;%1000;       % uM
     Config.CH4init  = 0;          % uM
     Config.Feinit   = 0;          % uM
     Config.HSinit   = 0;          % uM
     Config.Pinitial = 0;          % uM
 
     % ---------------- Fluxes ----------------
-    Config.NPP = 200;             % g / m2 / yr
+    Config.NPP = 400;             % g / m2 / yr
     Config.BE  = 0.1;
-    Config.F_FeOx  = 2;          % mmol / m2 / d
+    Config.F_FeOx  = 5;%2;          % mmol / m2 / d
     Config.F_CaCO3 = 10;          % g / m2 / yr
 
     % ---------------- Temperature / OM age ----------------
-    Config.T_future = 25;
+    Config.T_future = 18;%25;
     Config.ageinit = 0.1;
     Config.age_root = 1;
+    Config.Salinity = 38;
 
     % ---------------- Root-zone extras ----------------
     Config.DOC_root_1 = 0;
