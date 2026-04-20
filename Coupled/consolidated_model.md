@@ -40,6 +40,7 @@ end
 function Config = Config_Baseline()
 % CONFIG_BASELINE
 % Site / scenario specific settings for the OLD sequential core.
+Config.Corg_top = 0.028;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % ---------------- Domain ----------------
     Config.Lbottom = 30;          % cm
     Config.n = 101;
@@ -57,10 +58,10 @@ function Config = Config_Baseline()
     Config.Bioirrig_bottom = 0;
     Config.Bioirrig_scale = 0.75;
     % ---------------- Boundary concentrations ----------------
-    Config.O2init   = 150;        % uM
-    Config.SO4init  = 200;        % uM
-    Config.DICinit  = 1000;       % uM
-    Config.HCO3init = 950;        % uM
+    Config.O2init   = 200;%150;        % uM
+    Config.SO4init  = 29000;%200;        % uM
+    Config.DICinit  = 2700;%1000;       % uM
+    Config.HCO3init = 2000;%950;        % uM
     Config.Calcium  = 1000;       % uM
     Config.CH4init  = 0;          % uM
     Config.Feinit   = 0;          % uM
@@ -68,7 +69,7 @@ function Config = Config_Baseline()
     Config.Pinitial = 0;          % uM
     % ---------------- Fluxes ----------------
     Config.NPP = 200;             % g / m2 / yr
-    Config.BE  = 0.05;
+    Config.BE  = 0.1;
     Config.F_FeOx  = 2;          % mmol / m2 / d
     Config.F_CaCO3 = 10;          % g / m2 / yr
     % ---------------- Temperature / OM age ----------------
@@ -111,6 +112,18 @@ global DICinit HCO3init CaCO3_init
           Ya(5) - CaCO3_init;    % 5: CaCO3 top
           Yb(6) ];               % 6: CaCO3 bottom flux = 0
 end
+% function res = Coupled_Carbonate_bc(Ya, Yb)
+% global DICinit HCO3init Calcium CaCO3_init
+%
+% res = [ Ya(1) - DICinit;    % DIC top
+%         Yb(2);              % DIC bottom dissolved flux = 0
+%         Ya(3) - HCO3init;   % ALK top
+%         Yb(4);              % ALK bottom dissolved flux = 0
+%         Ya(5) - Calcium;    % Ca top
+%         Yb(6);              % Ca bottom dissolved flux = 0
+%         Ya(7) - CaCO3_init; % CaCO3 top solid concentration
+%         Yb(8) ];            % CaCO3 bottom mixing flux = 0
+% end
 ```
 
 ## File: Coupled_Carbonate_ODE.m
@@ -119,20 +132,23 @@ function dYdx = Coupled_Carbonate_ODE(x, Y)
 % Y(1) = DIC, Y(2) = dDIC/dx flux
 % Y(3) = ALK, Y(4) = dALK/dx flux
 % Y(5) = CaCO3, Y(6) = dCaCO3/dx (dummy/solid flux)
-global DHCO3 RC R_SRR kFeS C_Fe C_HS Alpha_Bioirrig DICinit HCO3init
+global DHCO3 RC Alpha_Bioirrig DICinit HCO3init
 global v_burial_Fluid v_burial z_sed poros rho
 global k_calcite k_calcite_dis1 k_calcite_dis2 n_power_CaCO31 n_power_CaCO32 n_power_CaCO33
 global Calcium Calcium_activity CO3_activity Ksp_ca
-global Rate_Meth T_future R_HS_Ox
+global Rate_Meth T_future R_FeS
+% global R_HS_Ox R_SRR kFeS C_Fe C_HS
     v_burial_f = double(interp1(z_sed, v_burial_Fluid, x));
     v_burial_s = double(interp1(z_sed, v_burial, x));
     fi = double(interp1(z_sed, poros, x));
     Alpha_Bioirrig_1 = double(interp1(z_sed, Alpha_Bioirrig, x));
     RC1 = double(interp1(z_sed, RC, x));
-    R_SRR1 = double(interp1(z_sed, R_SRR, x));
-    R_HS_Ox_1 = double(interp1(z_sed, R_HS_Ox, x));
-    C_Fe_1 = double(interp1(z_sed, C_Fe, x));
-    C_HS_1 = double(interp1(z_sed, C_HS, x));
+%     R_SRR1 = double(interp1(z_sed, R_SRR, x));
+%
+%     R_HS_Ox_1 = double(interp1(z_sed, R_HS_Ox, x));
+R_FeS_1   = double(interp1(z_sed, R_FeS, x));
+%     C_Fe_1 = double(interp1(z_sed, C_Fe, x));
+%     C_HS_1 = double(interp1(z_sed, C_HS, x));
     DIC = max(real(Y(1)), 1e-12);
     ALK = max(real(Y(3)), 1e-12);
     CaCO3 = max(real(Y(5)), 0);
@@ -156,11 +172,18 @@ Advection_DIC = v_burial_f .* (Y(2) / (fi * DHCO3));
     NR_DIC = Advection_DIC - (RC1*1E9-R_Meth_current) + R1_carb_total - (Alpha_Bioirrig_1*(DICinit - DIC));
     Advection_ALK = v_burial_f .* (Y(4) / (fi * DHCO3));
 %     NR_ALK = Advection_ALK - 2*(kFeS*C_Fe_1*C_HS_1) + 2*R1_carb_total - (Alpha_Bioirrig_1*(HCO3init - ALK));
-    eta_s = 0.5;   % 先试 0.5，再看是否要到 1.0
-    Net_S_term = eta_s * ( R_SRR1 ...
-                         - 2*(kFeS*C_Fe_1*C_HS_1) ...
-                         - R_HS_Ox_1 );
-    NR_ALK = Advection_ALK +Net_S_term - 2*(kFeS*C_Fe_1*C_HS_1) + 2*R1_carb_total - (Alpha_Bioirrig_1*(HCO3init - ALK));
+%     eta_s = 1;
+%
+%     Net_S_term = eta_s * ( R_SRR1 ...
+%                          - 2*(kFeS*C_Fe_1*C_HS_1) ...
+%                          - R_HS_Ox_1 );
+%
+%
+%     NR_ALK = Advection_ALK +Net_S_term + 2*R1_carb_total - (Alpha_Bioirrig_1*(HCO3init - ALK));
+   NR_ALK = Advection_ALK ...
+       - 2 * R_FeS_1 ...
+       + 2 * R1_carb_total ...
+       - (Alpha_Bioirrig_1 * (HCO3init - ALK));
     NR_CaCO3 = R_carb_form - R_carb_disso;
     %
     % dYdx = [ Y(2) / (fi * DHCO3);
@@ -351,31 +374,20 @@ end
 
 ## File: organicbc.m
 ```matlab
+
 function res = organicbc(C_orga,C_orgb)
-global NPP v_burial poros rho Bioturb BE
-NPP1 = BE * NPP * 1E-4; %gram/cm2/year
-v_burial1 = v_burial(1,1);  %cm/year
-poros1 = poros(1,1);
-A1 = rho * (1-poros1);
-Bioturb1 = Bioturb(1,1);
-BC_1 = - Bioturb1 * A1 * C_orga(2) + A1 * v_burial1 * C_orga(1) - NPP1;
-res = [ BC_1
-        C_orgb(2)];
+global Corg_top
+res = [ C_orga(1) - Corg_top     % top: fixed solid-phase OM concentration
+        C_orgb(2) ];             % bottom: zero gradient / zero diffusive flux
 end
 ```
 
 ## File: organicbc_1.m
 ```matlab
 function res = organicbc_1(C_orga,C_orgb)
-global NPP v_burial poros rho Bioturb BE
-NPP1 = BE * NPP * 1E-4; %gram/cm2/year
-v_burial1 = v_burial(1,1);  %cm/year
-poros1 = poros(1,1);
-A1 = rho * (1-poros1);
-Bioturb1 = Bioturb(1,1);
-BC_1 = - Bioturb1 * A1 * C_orga(2) + A1 * v_burial1 * C_orga(1) - NPP1;
-res = [ BC_1
-        C_orgb(2)];
+global Corg_top
+res = [ C_orga(1) - Corg_top     % top: fixed solid-phase OM concentration
+        C_orgb(2) ];             % bottom: zero gradient / zero diffusive flux
 end
 ```
 
@@ -419,7 +431,7 @@ function Params = Params_Static()
     Params.k_O2 = 2;             % uM
     Params.k_SO4 = 20;           % uM
     Params.KFEMonod = 200;       % umol / g
-    Params.DSO4 = 300;           % cm2 / yr
+    Params.DSO4 = 310;%300;           % cm2 / yr
     Params.DCH4 = 300;           % cm2 / yr
     Params.DH2S = 300;           % cm2 / yr
     Params.DO2  = 300;           % cm2 / yr
@@ -530,20 +542,29 @@ end
 
 ## File: Run_RTM_1D.m
 ```matlab
-
 clear all
-tic
 % ----------------------------- INPUT PARAMETERS ---------------------------
-global v_burial Mineral_Mass z_sed KFe_HS Oxygen Sulfate
-global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox Iron_conc Bioturb Calcium DHCO3 HCO3init
+global v_burial Mineral_Mass z_sed Oxygen Sulfate Corg_top
+global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox  Bioturb Calcium DHCO3 HCO3init
 global O2init SO4init HSinit C_organic rho poros RC Alpha_Bioirrig
-global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS R_iron R_FeOx Fe_3_init
-global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit Iron_C R_HS_Ox kapatite P_apaeq R1_carb_disso R1_carb_form
+global R_respi R_SRR Ksp_ca k_calcite DICinit R1_carb CO3_1 BE P_C_ratio Rviv1 R_FeS  R_FeOx Fe_3_init
+global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_Ox kapatite
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor T_future
-    Params = Params_Static();
+%global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
+%     if nargin < 1 || isempty(Custom_Config)
+%         Config = Config_Baseline();
+%     else
+%         Config = Custom_Config;
+%     end
+%     if nargin < 2 || isempty(Custom_Params)
+%         Params = Params_Static();
+%     else
+%         Params = Custom_Params;
+%     end
+        Params = Params_Static();
     Config = Config_Baseline();
-    Hydro  = Hydro_Preprocessor(Config, Params);
+%     Hydro  = Hydro_Preprocessor(Config, Params);
     rho = Params.rho;
     Mineral_Mass = 215;   % keep as legacy until explicitly audited
     k_O2 = Params.k_O2;
@@ -604,6 +625,7 @@ global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_c
     NPP             = Config.NPP;
     F_CaCO3         = Config.F_CaCO3;
     T_future        = Config.T_future;
+Corg_top = Config.Corg_top;
     BE = Config.BE;
     NPP = Config.NPP;
     if Config.use_hydro_npp_multiplier
@@ -666,24 +688,48 @@ pH    = 7.*ones(1,n);
 % ------------- ORGANIC MATTER DEGRADATION --------------------------------
 hold on
 % Solving ODE
+% if Bioturbtop == 0
+%
+% x = linspace(0,Lbottom,n);
+% CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+% C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+%
+% else
+%
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+% sol = bvp4c(@organicODE,@organicbc,solinit);
+% x = linspace(0,Lbottom,n);
+% y = deval(sol,x);
+%
+% if min(y) < 0
+%     fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+%
+% C_organic = y(1,:);
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+%
+% end
 if Bioturbtop == 0
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+    x = linspace(0,Lbottom,n);
+    C_organic = Corg_top .* exp(-cumsum((Temp_factor .* k_sed) ./ v_burial .* dz_sed));
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 else
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-x = linspace(0,Lbottom,n);
-y = deval(sol,x);
-if min(y) < 0
-    fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
-end
-y = max(y, 1e-12);
-C_organic = y(1,:);
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+    nmesh = 1000;
+    x = linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh), [Corg_top 0]);
+    sol = bvp4c(@organicODE, @organicbc, solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    C_organic = y(1,:);
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 end
 % ---------------------------- OXYGEN -------------------------------------
 RC = Temp_factor.*k_sed.*C_organic.*rho.*((1-poros)./(12)); % molCorg/cm3/yr mineralization rate
@@ -701,7 +747,7 @@ end
 y = max(y, 1e-12);
 C_O2 = y(1,:);
 Oxygen = C_O2;
-% ---------------------------- OXYGEN PENTRATION DEPTH --------------------
+% ---------------------------- OXYGEN PENTRATION DEPTS_ --------------------
 count_OPD = 0;
 for i=1:n
     if Oxygen(1,i) < 1
@@ -785,24 +831,52 @@ while abs(K_converge) > iteration_tolerance %for count_loop = 1:5
 % ------------- ORGANIC MATTER DEGRADATION --------------------------------
 hold on
 % Solving ODE
+% if Bioturbtop == 0
+%
+% x = linspace(0,Lbottom,n);
+% CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+% C_organic = CorgInit.*exp(-cumsum((Temp_factor.*k_sed)./v_burial.*dz_sed));
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+%
+% else
+%
+% nmesh=1000;
+% x=linspace(0,Lbottom,nmesh);
+% solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+% sol = bvp4c(@organicODE,@organicbc,solinit);
+%
+% x = linspace(0,Lbottom,n);
+%
+% y = deval(sol,x);
+%
+% if min(y) < 0
+%     fprintf('Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+% end
+% y = max(y, 1e-12);
+%
+%
+% C_organic = y(1,:);
+%
+% BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+%
+% end
 if Bioturbtop == 0
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit.*exp(-cumsum((Temp_factor.*k_sed)./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+    x = linspace(0,Lbottom,n);
+    C_organic = Corg_top .* exp(-cumsum((Temp_factor .* k_sed) ./ v_burial .* dz_sed));
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 else
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-x = linspace(0,Lbottom,n);
-y = deval(sol,x);
-if min(y) < 0
-    fprintf('Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
-end
-y = max(y, 1e-12);
-C_organic = y(1,:);
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+    nmesh = 1000;
+    x = linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh), [Corg_top 0]);
+    sol = bvp4c(@organicODE, @organicbc, solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    C_organic = y(1,:);
+    BEsed_org = C_organic ./ max(C_organic(1), 1e-12);
 end
 % ---------------------------- OXYGEN -------------------------------------
 RC = Temp_factor.*k_sed.*C_organic.*rho.*((1-poros)./(12)) + RC_root; % molCorg/cm3/yr mineralization rate
@@ -819,6 +893,22 @@ end
 y = max(y, 1e-12);
 C_O2 = y(1,:);
 Oxygen = C_O2;
+% -------- update OPD-based k_sed every iteration --------
+OPD_1 = [];
+num_OPD1 = [];
+for i = 1:n
+    if Oxygen(i) < 1
+        OPD_1(end+1) = z_sed(i);
+        num_OPD1(end+1) = i;
+    end
+end
+if isempty(OPD_1)
+    OPD = Lbottom;
+    num_OPD = n;
+else
+    OPD = OPD_1(1);
+    num_OPD = num_OPD1(1);
+end
 R_respi = RC.* (Oxygen./(Oxygen+k_O2)).*1E9; %rate of aerobic respiration umol/l/year
 % ------------------------ IRON(II) ---------------------------------------
 % Solving ODE
@@ -833,18 +923,19 @@ if min(y) < 0
 end
 y = max(y, 1e-12);
 C_Fe = y(1,:);
-Iron_C(iteration,:) = C_Fe;
-for i=1:n
-  if Iron_C(iteration,i) < 0
-      Iron_C(iteration,i) = 0;
-  end
-end
-F_diff_Fe(1,count_loop) = DH2S.*((C_Fe(1,2) - C_Fe(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
+% Iron_C(iteration,:) = C_Fe;
+%
+% for i=1:n
+%   if Iron_C(iteration,i) < 0
+%       Iron_C(iteration,i) = 0;
+%   end
+% end
+% F_diff_Fe(1,count_loop) = DH2S.*((C_Fe(1,2) - C_Fe(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 % ------------------------ IRON(III) ---------------------------------------
 Inhib = (k_O2./(Oxygen+k_O2)); % inhibition term for sulfate reduction by oxic respiration
-R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
+% R_iron(count_loop,:) = 4.*RC.*Inhib.* (FeooH./(FeooH+KFEMonod)).*1E9; %rate of iron reduction umol/l/year
 R_FeOx = (kFeOx.*C_Fe.*Oxygen);
-R_FeOx_1(count_loop,:) = R_FeOx;
+% R_FeOx_1(count_loop,:) = R_FeOx;
 % Fe_3_init  = 365.*1E2.*(F_FeOx)./(v_burial(1));  %umol/l
 Fe_3_init = 36.5.*(F_FeOx).*(poros(1)/(1-poros(1)))/(v_burial(1))/rho;  %umol/l
 % KFEMonod = 2000;
@@ -897,25 +988,28 @@ for i=1:n
   end
 end
 HS_conc = Sulfide(iteration,:)./(1+((10.^(6-pH))./K_HS));
-sigma_FeS_1 =  (Iron_C(iteration,:).*HS_conc)./((10.^(6-pH)).*KFeS);
-delta_FeS  = (sigma_FeS_1 - 1);
-for i=1:n
-  if delta_FeS (1,i) > 0
-      delta_FeS1(1,i) = 1;
-  else
-      delta_FeS1(1,i) = 0;
-  end
-end
-R_FeS = kFeS.*C_Fe.*C_HS;
-R_FeS_1(count_loop,:) = R_FeS;
-R_FeS_store(iteration,:) = R_FeS;
+% sigma_FeS_1 =  (Iron_C(iteration,:).*HS_conc)./((10.^(6-pH)).*KFeS);
+% delta_FeS  = (sigma_FeS_1 - 1);
+%
+% for i=1:n
+%   if delta_FeS (1,i) > 0
+%       delta_FeS1(1,i) = 1;
+%   else
+%       delta_FeS1(1,i) = 0;
+%   end
+% end
+% R_FeS = kFeS.*C_Fe.*C_HS;
+R_FeS = kFeS .* C_Fe .* HS_conc;
+% R_FeS_1(count_loop,:) = R_FeS;
+% R_FeS_store(iteration,:) = R_FeS;
 for i=1:n
   if R_FeS(1,i) < 0
       R_FeS(1,i) = 0;
   end
 end
-R_HS_Ox = Sulfide(iteration,:).* Oxygen.*Kreox; %rate of sulfide reduction umol/l/year
-F_diff_HS = DH2S.*((C_HS(1,2) - C_HS(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
+% R_HS_Ox = Sulfide(iteration,:).* Oxygen.*Kreox; %rate of sulfide reduction umol/l/year
+% R_HS_Ox = Kreox .* HS_conc .* Oxygen;%XL
+% F_diff_HS = DH2S.*((C_HS(1,2) - C_HS(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 % ------------------------ METHANE ---------------------------------------
 %XL calculating inhibition
 Inhib_O2_meth  = (k_O2 ./ (Oxygen + k_O2));
@@ -943,9 +1037,9 @@ sol_coupled = bvp4c(@Coupled_Carbonate_ODE, @Coupled_Carbonate_bc, solinit_coupl
 % options_coupled = bvpset('NMax', 5000, 'RelTol', 1e-2);
 % sol_coupled = bvp4c(@Coupled_Carbonate_ODE, @Coupled_Carbonate_bc, solinit_coupled, options_coupled);
 y_coupled = deval(sol_coupled, x);
-C_DIC  = y_coupled(1,:);
-C_alka = y_coupled(3,:);
-CaCO3  = y_coupled(5,:);
+C_DIC  = max(real(y_coupled(1,:)), 1e-12);
+C_alka = max(real(y_coupled(3,:)), 1e-12);
+CaCO3  = max(real(y_coupled(5,:)), 0);
 ALK    = C_alka;
 F_diff_DIC = DHCO3 .* ((C_DIC(1,2) - C_DIC(1,1)) ./ (x(1,2) - x(1,1))) * 1E-3;
 F_diff     = DHCO3 .* ((C_alka(1,2) - C_alka(1,1)) ./ (x(1,2) - x(1,1))) * 1E-3;
@@ -1016,6 +1110,65 @@ end  % iteration ends here
 Diff_fluxes = [F_diff_DIC F_diff F_diff_DIC./F_diff]';
 R_ALK_DIC = F_diff./F_diff_DIC;
 F_diff_CH4 = DCH4.*((CH4(1,2) - CH4(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
+% % ----------------------------- OUTPUT PACKAGING ---------------------------
+%     Outputs.z_sed = z_sed;
+%     Outputs.pH_profile = pH;
+%     Outputs.CH4_profile = CH4;
+%     Outputs.O2_profile = Oxygen;
+% %     Outputs.SO4_profile = Sulfate;
+% %     Outputs.DIC_profile = C_DIC;
+%
+%     % Core Diagnostics
+%     Outputs.Max_CH4 = max(CH4);
+%
+%
+%     Outputs.Org_Bottom = C_organic(end) * 100; % %gDw
+%     Outputs.ALK_Bottom = ALK(end);             % uM
+%     Outputs.pH_Bottom  = pH(end);              %
+%     Outputs.CH4_Bottom = CH4(end);             % uM
+% %     Outputs.Org_Top    = C_organic(1) * 100; % %gDw
+%
+%     % OPD: O2 < 1 uM
+%     idx_O2 = find(Oxygen < 1, 1);
+%     if isempty(idx_O2), Outputs.OPD = z_sed(end); else, Outputs.OPD = z_sed(idx_O2); end
+%
+%     % SO4_Depth: SO4 降至 < 10 uM
+%     idx_SO4 = find(Sulfate < 10, 1);
+%     if isempty(idx_SO4), Outputs.SO4_Depth = z_sed(end); else, Outputs.SO4_Depth = z_sed(idx_SO4); end
+%
+%
+%     idx_top5 = (z_sed <= 5);                   % 圈定 0-5 cm 网格
+%     idx_bot5 = (z_sed >= (Lbottom - 5));       % 圈定底部 5 cm 网格
+%
+%     Outputs.ALK_Bot5   = mean(ALK(idx_bot5));             % 底层 5cm 平均碱度
+%     Outputs.Sigma_Top5 = mean(sigma_carb(idx_top5));      % 表层 5cm 平均饱和度 (Omega-1)
+%     Outputs.CaCO3_Top5 = mean(CaCO3(idx_top5)) * 100;     % 表层 5cm 平均 CaCO3 (%gDw)
+%     Outputs.Integ_Meth = trapz(z_sed, Rate_Meth);         %integrated Rate_Meth
+%
+% %     % CH4_Onset_Depth: CH4 超过 10 uM 的深度
+% %     idx_CH4 = find(CH4 > 10, 1);
+% %     if isempty(idx_CH4), Outputs.CH4_Onset = z_sed(end); else, Outputs.CH4_Onset = z_sed(idx_CH4); end
+% %
+% %     % Sigma0_Depth: 碳酸钙饱和度 Omega-1 穿过 0 的深度 (>= 0)
+% %     idx_sigma = find(sigma_carb >= 0, 1);
+% %     if isempty(idx_sigma), Outputs.Sigma0_Depth = z_sed(end); else, Outputs.Sigma0_Depth = z_sed(idx_sigma); end
+% %
+% %     % CaCO3_Front_Depth: 碳酸钙开始显著积累的深度 (设定阈值为 1e-4，即脱离初始极小值)
+% %     idx_CaCO3 = find(CaCO3 > 1e-4, 1);
+% %     if isempty(idx_CaCO3), Outputs.CaCO3_Front = z_sed(end); else, Outputs.CaCO3_Front = z_sed(idx_CaCO3); end
+%
+%
+% %     % Methane Appearance Depth (Depth where CH4 > 5 uM)
+% %     ch4_idx = find(CH4 > 5, 1);
+% %     if isempty(ch4_idx)
+% %         Outputs.CH4_Depth = Lbottom; % No significant methane
+% %     else
+% %         Outputs.CH4_Depth = z_sed(ch4_idx);
+% %     end
+% %
+% %     Outputs.Convergence_Status = K_converge;
+%
+% end % End of Function
 % -------------------------------------------------------------------------
 % ----------------------------- PLOTS -------------------------------------
 clf;
@@ -1147,6 +1300,7 @@ box on
 grid on
 ax.LineWidth = 2;
 % Mineral saturation indices
+%
 % subplot(m_plot,n_plot,16);
 % plot(delta_viv1,z_sed,delta_apat2,z_sed,delta_FeS,z_sed,'lineWidth',2); axis ij  %umol/l/year
 % title('Mineral saturation (\Omega - 1)')
@@ -1156,7 +1310,6 @@ ax.LineWidth = 2;
 % grid on
 %
 % ax.LineWidth = 2;
-%
 % AAA_time = toc;
 % AAA_data = [Oxygen' C_DIC' C_alka' pH' sigma_carb' z_sed'];
 %
@@ -1173,7 +1326,7 @@ ax.LineWidth = 2;
 % R_FeOx_integ = cumsum(R_FeOx_1(count_loop-1,:).*dz_sed.*1E-3);
 % R_FeS_integ = cumsum(R_FeS.*dz_sed.*1E-3);
 % R_FeS_1_integ = cumsum(R_FeS_1(count_loop-1,:).*dz_sed.*1E-3);
-% R_HSOX_integ = cumsum(R_HS_Ox.*dz_sed.*1E-3);
+% R_HSOX_integ = cumsum(R_Ox.*dz_sed.*1E-3);
 % R_biorrig_integ = cumsum((Alpha_Bioirrig.*(HSinit-C_HS)).*dz_sed.*1E-3);
 % R_biorrig_integ_iron = cumsum((Alpha_Bioirrig.*(Feinit-C_Fe)).*dz_sed.*1E-3);
 % R_biorrigALK_integ = cumsum((Alpha_Bioirrig.*(HCO3init-ALK)).*dz_sed.*1E-3);
@@ -1209,7 +1362,242 @@ ax.LineWidth = 2;
 %
 % AAA_Store_1 = [F_FeOx R_SRR_integ_store R_ALK_integ_WITH_store];
 % AAA_Store = [NPP.*BE R_ALK_integ_WITH(end) R_ALK_integ_WITHOUT(end) 2.*R_carb_integ(end) F_diff];
-toc
+```
+
+## File: Sensitivity.m
+```matlab
+
+clc; clear; close all;
+% 1. Define Parameter Space: {Name, BaseValue, MinVal, MaxVal}
+% Grounded in realistic estuarine/riverine bounds
+Param_Space = {
+    'NPP',        200,   50,    600;   % Primary Production (g/m2/yr)
+    'BE',         0.1,  0.03,  0.15;  % Burial Efficiency (fraction)
+    'vbottom',    0.5,   0.1,   2.0;   % Sedimentation Rate (cm/yr)
+    'F_FeOx',     2,   0.1,   5.0;   % Fe(III) Flux (mmol/m2/d)
+    'F_CaCO3',        10,    1,     30;
+    'SO4init',    200,   50,    500;  % Boundary SO4 (uM)
+    'HCO3init',       950,   500,   2000;
+    'DICinit',        1000,  700,   2500;
+    'Calcium',        1000,  200,   2000;
+    'Bioturbtop', 10,    1,     30;     % Bioturbation (cm2/yr)
+    'k_SO4',      20,    5,     30;     % uM
+    'DSO4',      310,   100,   500;    % cm2 / yr
+    'DCH4',      300,   100,   500;    % cm2 / yr
+    'DH2S',      300,   429,   650;    % cm2 / yr
+    'DO2',      300,   370,   730;    % cm2 / yr
+    'Kreox',      500,   10,   1000;    % 1 / umol / L / yr
+    'kFeOx',      10,   1,   100;    % 1 / umol / L / yr
+    'kFeS',       10,   1,   100;    % 1 / umol / L / yr
+    'K_CH4_SO4',  100,   10,   500;    % uM
+    'k_AOM',      1,   0.1,   10;    % 1 / yr
+    'k_aerobic_CH4',      6,   1,   10 ;   % 1 / yr
+    % 'k_calcite',      1,     0.2,   5;
+    % 'k_calcite_dis1', 0.005, 0.001, 0.05;
+    'k_calcite_dis2', 10,    1,     50;
+};
+num_params = size(Param_Space, 1);
+range_fraction = 0.10; % Perturb by 10% of the total physical range
+% 2. Execute Baseline Run
+Base_Config = Config_Baseline();
+Base_Params = Params_Static();
+fprintf('Executing Baseline Run...\n');
+try
+    Base_Outputs = Run_RTM_1D(Base_Config, Base_Params);
+catch
+    error('Baseline run failed.');
+end
+% % Extract Baseline Targets
+% Base_Max_CH4   = Base_Outputs.Max_CH4;
+% Base_Bottom_pH = Base_Outputs.Bottom_pH;
+%
+% % Preallocate
+% S_Max_CH4   = zeros(num_params, 1);
+% S_Bottom_pH = zeros(num_params, 1);
+% S_Org_Burial  = zeros(num_params, 1);
+% S_ALK_Bottom  = zeros(num_params, 1);
+% S_Carb_Burial = zeros(num_params, 1);
+% S_CH4_Flux    = zeros(num_params, 1);
+% Param_Names = cell(num_params, 1);
+%
+% % 3. Execute Range-Scaled Perturbation Loop
+% fprintf('Starting Range-Scaled Scan (%.0f%% of feasible range)...\n', range_fraction * 100);
+% tic;
+%
+% for i = 1:num_params
+%     Param_Names{i} = Param_Space{i, 1};
+%     base_val = Param_Space{i, 2};
+%     min_val  = Param_Space{i, 3};
+%     max_val  = Param_Space{i, 4};
+%
+%     % Calculate delta based on RANGE, not baseline
+%     delta_X = range_fraction * (max_val - min_val);
+%     perturb_val = base_val + delta_X;
+%
+%     Run_Config = Base_Config;
+%     Run_Config.(Param_Names{i}) = perturb_val;
+%
+%     fprintf('Testing %s: %.3f -> %.3f ... ', Param_Names{i}, base_val, perturb_val);
+%
+%     try
+%         Outputs = Run_RTM_1D(Run_Config);
+%
+%         % Calculate Range-Scaled Sensitivity (S)
+%         delta_CH4 = Outputs.Max_CH4 - Base_Max_CH4;
+%         % Mathematical safeguard for zero baseline methane (avoids Inf)
+%         denom_CH4 = max(Base_Max_CH4, 1e-6);
+%         S_Max_CH4(i) = (delta_CH4 / denom_CH4) / range_fraction;
+%
+%         delta_pH = Outputs.Bottom_pH - Base_Bottom_pH;
+%         S_Bottom_pH(i) = (delta_pH / Base_Bottom_pH) / range_fraction;
+%
+%         fprintf('Done.\n');
+%     catch ME
+%         fprintf('FAILED (Stiff ODE). S assigned as NaN.\n');
+%         S_Max_CH4(i)   = NaN;
+%         S_Bottom_pH(i) = NaN;
+%     end
+% end
+% exec_time = toc;
+% fprintf('Scan Complete in %.2f seconds.\n', exec_time);
+%
+% % 4. Visualization (Tornado Plots)
+% figure('Name', 'Range-Scaled Sensitivity Analysis', 'Color', 'w', 'Position', [150, 150, 1000, 450]);
+%
+% % Subplot 1: Sensitivity of Max CH4
+% subplot(1,2,1);
+% [sorted_S_CH4, idx_CH4] = sort(S_Max_CH4, 'ascend');
+% sorted_Names_CH4 = Param_Names(idx_CH4);
+%
+% barh(sorted_S_CH4, 'FaceColor', [0.85 0.32 0.09], 'EdgeColor', 'k');
+% set(gca, 'YTick', 1:num_params, 'YTickLabel', sorted_Names_CH4, 'TickLabelInterpreter', 'none');
+% xlabel('Range-Scaled Sensitivity (S_{range})');
+% title('Sensitivity of Max CH_4');
+% xline(0, 'k--', 'LineWidth', 1.5);
+% grid on;
+%
+% % Subplot 2: Sensitivity of Bottom pH
+% subplot(1,2,2);
+% [sorted_S_pH, idx_pH] = sort(S_Bottom_pH, 'ascend');
+% sorted_Names_pH = Param_Names(idx_pH);
+%
+% barh(sorted_S_pH, 'FaceColor', [0.0 0.44 0.74], 'EdgeColor', 'k');
+% set(gca, 'YTick', 1:num_params, 'YTickLabel', sorted_Names_pH, 'TickLabelInterpreter', 'none');
+% xlabel('Range-Scaled Sensitivity (S_{range})');
+% title('Sensitivity of Bottom pH');
+% xline(0, 'k--', 'LineWidth', 1.5);
+% grid on;
+%
+% sgtitle(sprintf('Range-Scaled Sensitivity (+%.0f%% of Physical Bound)', range_fraction*100), 'FontWeight', 'bold');
+% --- 2. 预分配空间与基线提取 ---
+Base_Org_Bottom = Base_Outputs.Org_Bottom;
+% Base_Org_Top  = Base_Outputs.Org_Top;
+Base_ALK = Base_Outputs.ALK_Bottom;
+Base_pH  = Base_Outputs.pH_Bottom;
+Base_CH4 = Base_Outputs.CH4_Bottom;
+Base_OPD   = Base_Outputs.OPD;
+Base_SO4D  = Base_Outputs.SO4_Depth;
+% Base_CH4D  = Base_Outputs.CH4_Onset;
+% Base_SigD  = Base_Outputs.Sigma0_Depth;
+% Base_CaD   = Base_Outputs.CaCO3_Front;
+B_Meth  = Base_Outputs.Integ_Meth;
+B_ALK5  = Base_Outputs.ALK_Bot5;
+B_Sig5  = Base_Outputs.Sigma_Top5;
+B_Ca5   = Base_Outputs.CaCO3_Top5;
+% 无论你有多少个 Output，都先建好全零数组
+S_OrgB = zeros(num_params, 1);
+% S_OrgT = zeros(num_params,1);
+S_ALK = zeros(num_params, 1);
+S_pH  = zeros(num_params, 1);
+S_CH4 = zeros(num_params, 1);
+S_OPD  = zeros(num_params,1);
+S_SO4D = zeros(num_params,1);
+% S_CH4D = zeros(num_params,1);
+% S_SigD = zeros(num_params,1);
+% S_CaD  = zeros(num_params,1);
+S_ALK5 = zeros(num_params, 1);
+S_Sig5 = zeros(num_params,1);
+S_Ca5  = zeros(num_params,1);
+S_Meth = zeros(num_params,1);
+Param_Names = cell(num_params, 1);
+% --- 3. 执行扰动循环 ---
+fprintf('Starting Range-Scaled Scan...\n');
+tic;
+for i = 1:num_params
+    Param_Names{i} = Param_Space{i, 1};
+    base_val = Param_Space{i, 2};
+    min_val  = Param_Space{i, 3};
+    max_val  = Param_Space{i, 4};
+    delta_X = range_fraction * (max_val - min_val);
+    perturb_val = base_val + delta_X;
+    Run_Config = Base_Config;
+    Run_Params = Base_Params;
+    % Auto-Route the parameter to the correct struct
+    if isfield(Run_Config, Param_Names{i})
+        Run_Config.(Param_Names{i}) = perturb_val;
+    elseif isfield(Run_Params, Param_Names{i})
+        Run_Params.(Param_Names{i}) = perturb_val;
+    else
+        error(['Parameter ', Param_Names{i}, ' not found in Config or Params.']);
+    end
+    fprintf('Testing %s: %.3f -> %.3f ... \n', Param_Names{i}, base_val, perturb_val);
+    try
+        Outputs = Run_RTM_1D(Run_Config, Run_Params); % Pass both!
+        % 计算各个指标的归一化敏感度
+        S_OrgB(i) = ((Outputs.Org_Bottom - Base_Org_Bottom) / max(Base_Org_Bottom, 1e-6)) / range_fraction;
+%         S_OrgT(i) = ((Outputs.Org_Top    - Base_Org_Top) / max(Base_Org_Top, 1e-6)) / range_fraction;
+        S_ALK(i) = ((Outputs.ALK_Bottom - Base_ALK) / max(Base_ALK, 1e-6)) / range_fraction;
+        S_pH(i)  = ((Outputs.pH_Bottom  - Base_pH)  / max(Base_pH,  1e-6)) / range_fraction;
+        S_CH4(i) = ((Outputs.CH4_Bottom - Base_CH4) / max(Base_CH4, 1e-6)) / range_fraction;
+        S_ALK5(i) = ((Outputs.ALK_Bot5   - B_ALK5) / max(B_ALK5, 1e-6)) / range_fraction;
+        S_Sig5(i) = ((Outputs.Sigma_Top5 - B_Sig5) / max(abs(B_Sig5), 1e-4)) / range_fraction;
+        S_Ca5(i)  = ((Outputs.CaCO3_Top5 - B_Ca5)  / max(B_Ca5,  1e-6)) / range_fraction;
+        S_Meth(i) = ((Outputs.Integ_Meth - B_Meth) / max(B_Meth, 1e-6)) / range_fraction;
+        S_OPD(i)  = ((Outputs.OPD       - Base_OPD)  / max(Base_OPD,  0.1)) / range_fraction;
+        S_SO4D(i) = ((Outputs.SO4_Depth - Base_SO4D) / max(Base_SO4D, 0.1)) / range_fraction;
+%         S_CH4D(i) = ((Outputs.CH4_Onset - Base_CH4D) / max(Base_CH4D, 0.1)) / range_fraction;
+%         S_SigD(i) = ((Outputs.Sigma0_Depth- Base_SigD) / max(Base_SigD, 0.1)) / range_fraction;
+%         S_CaD(i)  = ((Outputs.CaCO3_Front- Base_CaD)  / max(Base_CaD,  0.1)) / range_fraction;
+    catch ME
+        S_OrgB(i) = NaN; S_ALK(i) = NaN; S_pH(i) = NaN; S_CH4(i) = NaN;
+        fprintf('报错信息为: %s\n', ME.message);
+    end
+end
+fprintf('Scan Complete in %.2f seconds.\n', toc);
+% --- 4. 可扩展动态绘图模块 ---
+% 【扩展指南】未来若要增加输出，只需在这两个 Cell Array 中添加新变量和标题即可
+Targets = {S_OrgB, S_ALK, S_pH, S_CH4, S_OPD, S_SO4D, S_Meth, S_Sig5, S_Ca5};
+Titles  = {'Bottom Organic (%)', 'Bottom ALK (\muM)', 'Bottom pH', 'Bottom CH_4 (\muM)', ...
+        'OPD (O_2 < 1\muM)', 'SO_4 Depletion Depth','Integrated Methanogenesis',...
+         'Mean \Omega-1 (Top 5cm)', 'Mean CaCO_3 (Top 5cm)'};
+n_targets = length(Targets);
+% 自动计算子图的行列数
+cols = ceil(sqrt(n_targets));
+rows = ceil(n_targets / cols);
+% 自动调整窗口大小以适应子图数量
+figure('Name', 'Multi-Output Sensitivity', 'Color', 'w', 'Position', [100, 100, cols*400, rows*350]);
+for k = 1:n_targets
+    subplot(rows, cols, k);
+%     [sorted_S, idx] = sort(Targets{k}, 'ascend');
+%     sorted_Names = Param_Names(idx);
+    % 使用统一的配色
+%      barh(sorted_S, 'FaceColor', [0.2 0.6 0.8], 'EdgeColor', 'k');
+barh(Targets{k}, 'FaceColor', [0.2 0.6 0.8], 'EdgeColor', 'k');
+set(gca, 'YTick', 1:num_params, 'YTickLabel', Param_Names, 'TickLabelInterpreter', 'none');
+set(gca, 'YDir', 'reverse');
+%      set(gca, 'YTick', 1:num_params, 'YTickLabel', sorted_Names, 'TickLabelInterpreter', 'none');
+%     xlabel('Sensitivity Index (S_{range})');
+    title(['Sensitivity of: ', Titles{k}]);
+    xline(0, 'k-', 'LineWidth', 1.2);
+    grid on;
+    max_abs_val = max(abs(Targets{k}(~isnan(Targets{k}))));
+    % 2. 安全保护：如果算出全是 0 或报错，给一个默认基准 1
+    if isempty(max_abs_val) || max_abs_val == 0
+        max_abs_val = 1;
+    end
+    % 3. 强制锁定坐标轴边界，乘 1.1 是为了左右两边留出 10% 的空白余量好看
+    xlim([-max_abs_val * 1.1, max_abs_val * 1.1]);
+end
 ```
 
 ## File: SO4_bc.m
@@ -1238,5 +1626,93 @@ NR = + v_burial_f.* (SO4(2)/(fi*DSO4)) + 0.5.*RC1.*Inh.* (SO4(1)/(SO4(1)+k_SO4))
 dydx = [ SO4(2) /fi/DSO4
            NR];
 end
+```
+
+## File: untitled.m
+```matlab
+
+clc; clear; close all;
+% 1. Define Parameter Space: {Name, BaseValue, MinVal, MaxVal}
+% Grounded in realistic estuarine/riverine bounds
+Param_Space = {
+    'NPP',        200,   50,    600;   % Primary Production (g/m2/yr)
+    'BE',         0.05,  0.01,  0.20;  % Burial Efficiency (fraction)
+    'vbottom',    0.5,   0.1,   2.0;   % Sedimentation Rate (cm/yr)
+    'F_FeOx',     1.0,   0.1,   5.0;   % Fe(III) Flux (mmol/m2/d)
+    'SO4init',    200,   50,    1000;  % Boundary SO4 (uM)
+    'Bioturbtop', 10,    1,     30     % Bioturbation (cm2/yr)
+};
+num_params = size(Param_Space, 1);
+range_fraction = 0.10; % Perturb by 10% of the total physical range
+% 2. Execute Baseline Run
+Base_Config = Config_Baseline();
+fprintf('Executing Baseline Run...\n');
+try
+    Base_Outputs = Run_RTM_1D(Base_Config);
+catch
+    error('Baseline run failed. Ensure Run_RTM_1D is stable.');
+end
+% Extract Baseline Targets
+Base_Max_CH4   = Base_Outputs.Max_CH4;
+Base_Bottom_pH = Base_Outputs.Bottom_pH;
+% Preallocate
+S_Max_CH4   = zeros(num_params, 1);
+S_Bottom_pH = zeros(num_params, 1);
+Param_Names = cell(num_params, 1);
+% 3. Execute Range-Scaled Perturbation Loop
+fprintf('Starting Range-Scaled Scan (%.0f%% of feasible range)...\n', range_fraction * 100);
+tic;
+for i = 1:num_params
+    Param_Names{i} = Param_Space{i, 1};
+    base_val = Param_Space{i, 2};
+    min_val  = Param_Space{i, 3};
+    max_val  = Param_Space{i, 4};
+    % Calculate delta based on RANGE, not baseline
+    delta_X = range_fraction * (max_val - min_val);
+    perturb_val = base_val + delta_X;
+    Run_Config = Base_Config;
+    Run_Config.(Param_Names{i}) = perturb_val;
+    fprintf('Testing %s: %.3f -> %.3f ... ', Param_Names{i}, base_val, perturb_val);
+    try
+        Outputs = Run_RTM_1D(Run_Config);
+        % Calculate Range-Scaled Sensitivity (S)
+        delta_CH4 = Outputs.Max_CH4 - Base_Max_CH4;
+        % Mathematical safeguard for zero baseline methane (avoids Inf)
+        denom_CH4 = max(Base_Max_CH4, 1e-6);
+        S_Max_CH4(i) = (delta_CH4 / denom_CH4) / range_fraction;
+        delta_pH = Outputs.Bottom_pH - Base_Bottom_pH;
+        S_Bottom_pH(i) = (delta_pH / Base_Bottom_pH) / range_fraction;
+        fprintf('Done.\n');
+    catch ME
+        fprintf('FAILED (Stiff ODE). S assigned as NaN.\n');
+        S_Max_CH4(i)   = NaN;
+        S_Bottom_pH(i) = NaN;
+    end
+end
+exec_time = toc;
+fprintf('Scan Complete in %.2f seconds.\n', exec_time);
+% 4. Visualization (Tornado Plots)
+figure('Name', 'Range-Scaled Sensitivity Analysis', 'Color', 'w', 'Position', [150, 150, 1000, 450]);
+% Subplot 1: Sensitivity of Max CH4
+subplot(1,2,1);
+[sorted_S_CH4, idx_CH4] = sort(S_Max_CH4, 'ascend');
+sorted_Names_CH4 = Param_Names(idx_CH4);
+barh(sorted_S_CH4, 'FaceColor', [0.85 0.32 0.09], 'EdgeColor', 'k');
+set(gca, 'YTick', 1:num_params, 'YTickLabel', sorted_Names_CH4, 'TickLabelInterpreter', 'none');
+xlabel('Range-Scaled Sensitivity (S_{range})');
+title('Sensitivity of Max CH_4');
+xline(0, 'k--', 'LineWidth', 1.5);
+grid on;
+% Subplot 2: Sensitivity of Bottom pH
+subplot(1,2,2);
+[sorted_S_pH, idx_pH] = sort(S_Bottom_pH, 'ascend');
+sorted_Names_pH = Param_Names(idx_pH);
+barh(sorted_S_pH, 'FaceColor', [0.0 0.44 0.74], 'EdgeColor', 'k');
+set(gca, 'YTick', 1:num_params, 'YTickLabel', sorted_Names_pH, 'TickLabelInterpreter', 'none');
+xlabel('Range-Scaled Sensitivity (S_{range})');
+title('Sensitivity of Bottom pH');
+xline(0, 'k--', 'LineWidth', 1.5);
+grid on;
+sgtitle(sprintf('Range-Scaled Sensitivity (+%.0f%% of Physical Bound)', range_fraction*100), 'FontWeight', 'bold');
 ```
 
