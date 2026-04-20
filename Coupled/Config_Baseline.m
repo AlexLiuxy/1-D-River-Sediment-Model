@@ -37,7 +37,7 @@ Config.Corg_top = 0.028;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % ---------------- Fluxes ----------------
     Config.NPP = 400;             % g / m2 / yr
     Config.BE  = 0.1;
-    Config.F_FeOx  = 5;%2;          % mmol / m2 / d
+    Config.F_FeOx  = 2.5;%2;          % mmol / m2 / d
     Config.F_CaCO3 = 10;          % g / m2 / yr
 
     % ---------------- Temperature / OM age ----------------

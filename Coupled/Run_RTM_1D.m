@@ -75,7 +75,7 @@ global T_future Rate_Meth Salinity pH K_HS R_AOM_lag
     P_C_ratio = Params.P_C_ratio;
 
     kapatite = Params.kapatite;
-    KFeS = Params.KFeS;
+%     KFeS = Params.KFeS;
     K_HS = Params.K_HS;
     Q10 = Params.Q10;
     T_ref = Params.T_ref;

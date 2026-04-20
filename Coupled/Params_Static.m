@@ -5,7 +5,7 @@ function Params = Params_Static()
     Params.rho = 2.73;           % g / cm3
     Params.k_O2 = 2;             % uM
     Params.k_SO4 = 20;           % uM
-    Params.KFEMonod = 800;%200;       % umol / g
+    Params.KFEMonod = 1000;%200;       % umol / g
 
     Params.DSO4 = 310;%300;           % cm2 / yr
     Params.DCH4 = 300;           % cm2 / yr
@@ -41,7 +41,7 @@ function Params = Params_Static()
     Params.FeC_frac_max = 0.35;   % Fe reduction最多拿走35%的RC_after_O2，先做baseline用
 
     % extras already used by old core
-    Params.KFeS = 2500;
+%     Params.KFeS = 2500;
     Params.K_HS = 7;
     Params.kapatite = 0.05;
     Params.Kviv = 3e6;
