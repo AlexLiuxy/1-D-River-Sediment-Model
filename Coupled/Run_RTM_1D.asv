@@ -56,7 +56,6 @@ global T_future Rate_Meth Salinity pH K_HS R_AOM_lag
     Kreox = Params.Kreox;
     kFeOx = Params.kFeOx;
     kFeS  = Params.kFeS;
-    FeC_frac_max = Params.FeC_frac_max;
 
     K_CH4_SO4 = Params.K_CH4_SO4;
     K_CH4_O2  = Params.K_CH4_O2;
@@ -707,8 +706,8 @@ R_CH4Ox = k_aerobic_CH4 .* CH4 .* (Oxygen ./ (Oxygen + K_CH4_O2));
 
 % carbonate ledger must use the same lagged AOM that sulfur ODEs used this iteration
 R_DIC_prod = R_respi + R_FeRed ./ 4 + 2 .* R_SRR + Rate_Meth + R_CH4Ox + R_AOM_lag;
-R_ALK_prod = 0.5 .* R_FeRed + 2 .* R_SRR + 2 .* R_AOM_lag - 2 .* R_FeS - R_HS_Ox;
-% R_ALK_prod = 2.0 .* R_FeRed + 2 .* R_SRR + 2 .* R_AOM_lag - 2 .* R_FeS -  R_HS_Ox;
+% R_ALK_prod = 0.5 .* R_FeRed + 2 .* R_SRR + 2 .* R_AOM_lag - 2 .* R_FeS - R_HS_Ox;
+R_ALK_prod = 2.0 .* R_FeRed + 2 .* R_SRR + 2 .* R_AOM_lag - 2 .* R_FeS - 2 .* R_HS_Ox;
 
 R_AOM_lag = R_AOM;
 % ------------------------------- Coupled Carbonate -----------------------------------

@@ -29,7 +29,7 @@ function Params = Params_Static()
     Params.k_calcite_dis2 = 10;
     Params.n_power_CaCO31 = 1.76;
     Params.n_power_CaCO32 = 0.11;
-    Params.n_power_CaCO33 = 4;
+    Params.n_power_CaCO33 = 4;%4;
 
     Params.Calcium_activity = 1.0;%0.6;
     Params.CO3_activity     = 1.0;%0.6;
@@ -37,6 +37,8 @@ function Params = Params_Static()
     Params.P_C_ratio = 0.0094;
     Params.Q10   = 2;
     Params.T_ref = 25;
+
+    Params.FeC_frac_max = 0.35;   % Fe reduction最多拿走35%的RC_after_O2，先做baseline用
 
     % extras already used by old core
     Params.KFeS = 2500;
