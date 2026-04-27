@@ -726,24 +726,6 @@ end
 
 R_HS_Ox = max(Kreox .* HS_conc .* Oxygen, 0);   % umol/L/yr
 
-% ---------------- Fe diagnostics ----------------
-I_FeRed = trapz(z_sed, R_FeRed) .* 1e-3;   % umol Fe/cm2/yr
-I_FeOx  = trapz(z_sed, R_FeOx)  .* 1e-3;
-I_FeS   = trapz(z_sed, R_FeS)   .* 1e-3;
-
-% temporary: currently Fe2 uses DH2S as diffusion coefficient
-J_Fe2_top_up = DH2S .* ((C_Fe(2) - C_Fe(1)) ./ dz_sed) .* 1e-3;
-
-fprintf('\n--- Fe diagnostics ---\n');
-fprintf('I_FeRed          = %.3f umol Fe/cm2/yr\n', I_FeRed);
-fprintf('I_FeOx           = %.3f umol Fe/cm2/yr\n', I_FeOx);
-fprintf('I_FeS            = %.3f umol Fe/cm2/yr\n', I_FeS);
-fprintf('J_Fe2 top up     = %.3f umol Fe/cm2/yr\n', J_Fe2_top_up);
-fprintf('max Fe2          = %.1f uM\n', max(C_Fe));
-fprintf('max Fe3          = %.1f umol/g\n', max(FeooH));
-fprintf('Fe sink/source   = %.3f\n', (I_FeOx + I_FeS + J_Fe2_top_up) / max(I_FeRed,1e-12));
-fprintf('----------------------\n\n');
-
 % ------------------------ METHANE ---------------------------------------
 RC_after_SO4 = max(RC_after_Fe - 2 .* R_SRR, 0);   % umol C/L/yr
 
@@ -793,22 +775,6 @@ R_ALK_prod = 0.5 .* R_FeRed ...
 % Store potential AOM for the next iteration's SO4 solve.
 R_AOM_pot = k_AOM .* CH4;
 R_AOM_lag = R_AOM;
-
-% ---------------- Redox partition diagnostics ----------------
-I_RC     = trapz(z_sed, RC .* 1E9) .* 1e-3;        % umol C/cm2/yr
-I_respi  = trapz(z_sed, R_respi) .* 1e-3;          % umol C/cm2/yr
-I_FeC    = trapz(z_sed, R_FeRed ./ 4) .* 1e-3;     % umol C/cm2/yr
-I_SO4C   = trapz(z_sed, 2 .* R_SRR) .* 1e-3;       % umol C/cm2/yr
-I_methC  = trapz(z_sed, 2 .* Rate_Meth) .* 1e-3;   % umol C/cm2/yr
-
-fprintf('\n--- Carbon redox partition ---\n');
-fprintf('I_RC total       = %.3f umol C/cm2/yr\n', I_RC);
-fprintf('I_O2 respiration = %.3f (%.1f%%)\n', I_respi, 100*I_respi/max(I_RC,1e-12));
-fprintf('I_Fe reduction   = %.3f (%.1f%%)\n', I_FeC,   100*I_FeC/max(I_RC,1e-12));
-fprintf('I_SO4 reduction  = %.3f (%.1f%%)\n', I_SO4C,  100*I_SO4C/max(I_RC,1e-12));
-fprintf('I_methanogenesis = %.3f (%.1f%%)\n', I_methC, 100*I_methC/max(I_RC,1e-12));
-fprintf('Closure ratio     = %.3f\n', (I_respi + I_FeC + I_SO4C + I_methC)/max(I_RC,1e-12));
-fprintf('------------------------------\n\n');
 
 % ------------------------------- Coupled Carbonate -----------------------------------
 CaCO3_init = 1E-4 .* (F_CaCO3) .* (poros(1) / (1 - poros(1))) / (v_burial(1) * rho);  % gr/grDw
