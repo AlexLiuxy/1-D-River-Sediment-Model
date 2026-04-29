@@ -21,7 +21,7 @@ global R_respi R_SRR R_FeRed RC_after_Fe R_DIC_prod R_ALK_prod R_AOM R_CH4Ox Ksp
 global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_Ox kapatite
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor 
-global T_future Rate_Meth Salinity pH K_HS R_AOM_lag R_AOM_actual R_AOM_pot SO4_diag
+global T_future Rate_Meth Salinity pH K_HS R_AOM_lag R_AOM_actual R_AOM_pot SO4_diag F_FeOx
 %global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
     
 
@@ -185,9 +185,12 @@ Rapat = zeros(1,n);
 Rviv1 = zeros(1,n); %umol/Lsed/yr
 R_FeS = ones(1,n); %umol/Lsed/yr
 pH    = pH_top.*ones(1,n);
+
 R_AOM_lag = zeros(1,n);
 R_AOM_pot    = zeros(1,n);   % potential AOM from previous CH4 profile, before SO4 limitation
 R_AOM_actual = zeros(1,n);   % actual SO4-supported AOM used by sulfur/carbonate ledger
+R_FeOx = zeros(1,n);   % lagged Fe(II) reoxidation used to cap Fe reduction supply
+
 % ----------------------- Correcting organic matter reactivity based on oxygen penetration depth ----------------
 % After calculating the oxygen penetration depth, reactivity profiles would
 % be corrected using oxic and anoxic power law by Katsev & Crowe (2015).
@@ -396,12 +399,22 @@ end
 
 % -------------------------------------------------------------------------
 
-K_converge = 1;
 iteration = 1;
-iteration_tolerance = 0.3;
 count_loop = 1;
 
-while abs(K_converge) > iteration_tolerance %for count_loop = 1:5 
+max_outer_iter = 12;
+min_outer_iter = 5;
+conv_tol = 0.05;     % 5% profile/rate convergence
+
+C_Fe_prev   = [];
+FeooH_prev  = [];
+Sulfate_prev = [];
+CH4_prev    = [];
+ALK_prev    = [];
+pH_prev     = [];
+C_HS_prev = [];
+R_FeS_prev = [];
+while iteration <= max_outer_iter
     
 
 % ------------- ORGANIC MATTER DEGRADATION --------------------------------
@@ -506,11 +519,46 @@ R_respi = RC .* (Oxygen ./ (Oxygen + k_O2)) .* 1E9;   % umol/L/yr
 RC_total_uM = RC .* 1E9;                              % umol C / L / yr
 RC_after_O2 = max(RC_total_uM - R_respi, 0);
 
-% cap Fe reduction so Fe branch does not consume nearly all residual carbon
-Fe_gate = FeooH ./ (FeooH + KFEMonod);
-C_to_Fe = min(FeC_frac_max .* RC_after_O2, RC_after_O2 .* Fe_gate);   % umol C/L/yr
-R_FeRed = 4 .* C_to_Fe;                                                  % umol Fe2+/L/yr
+% FeooH_old = FeooH;
+% % cap Fe reduction so Fe branch does not consume nearly all residual carbon
+% Fe_gate = FeooH_old ./ (FeooH_old + KFEMonod);
+% C_to_Fe = min(FeC_frac_max .* RC_after_O2, RC_after_O2 .* Fe_gate);
+% R_FeRed = 4 .* C_to_Fe;
 
+FeooH_old = FeooH;
+
+% Potential Fe reduction demand from carbon and local FeOOH availability.
+% FeC_frac_max is no longer active.
+Fe_gate = FeooH_old ./ max(FeooH_old + KFEMonod, 1e-12);
+C_to_Fe_pot = RC_after_O2 .* Fe_gate;
+R_FeRed_pot = 4 .* C_to_Fe_pot;
+
+I_FeRed_pot = trapz(z_sed, R_FeRed_pot) .* 1e-3;
+
+solid1 = rho .* max(1 - poros(1), 1e-6);
+
+J_Fe3_burial_in = solid1 .* v_burial(1) .* FeooH_old(1);
+
+J_Fe3_mix_in = -solid1 .* Bioturb(1) .* ...
+    ((FeooH_old(2) - FeooH_old(1)) ./ dz_sed);
+
+I_Fe_transport_supply = max(0, J_Fe3_burial_in + J_Fe3_mix_in);
+
+I_Fe_recycle_lag = trapz(z_sed, max(R_FeOx,0)) .* 1e-3;
+
+I_Fe_supply_ext = F_FeOx .* 36.5;  % mmol/m2/d -> umol/cm2/yr
+
+I_Fe_supply_cap = I_Fe_supply_ext ...
+                + I_Fe_transport_supply ...
+                + I_Fe_recycle_lag;
+
+Fe_supply_scale = min(1, I_Fe_supply_cap ./ max(I_FeRed_pot, 1e-12));
+
+R_FeRed = R_FeRed_pot .* Fe_supply_scale;
+C_to_Fe = R_FeRed ./ 4;
+
+C_HS_used_for_Fe2 = C_HS;
+pH_used_for_Fe2 = pH;
 % ------------------------ IRON(II) ---------------------------------------
  
 % Solving ODE
@@ -575,6 +623,9 @@ C_Fe = y(1,:);
 R_FeOx = kFeOx .* C_Fe .* Oxygen;
 Fe_3_init = 36.5 .* F_FeOx .* (poros(1)/(1-poros(1))) / (v_burial(1) * rho);  % umol/g
 
+% Fe3 top boundary is now flux-controlled by F_FeOx in Fe3_bc.m.
+% Do not convert F_FeOx into a fixed FeOOH surface concentration here.
+
 % Solve Fe(III) with the current Fe3_ODE instead of explicit forward update
 nmesh = 1000;
 x = linspace(0, Lbottom, nmesh);
@@ -593,13 +644,14 @@ if min(y(1,:)) < 0
     fprintf('Fe3 is negative in the current iteration! Minimum：%.2e\n', min(y(1,:)));
 end
 
-C_Fe_3 = max(y(1,:), 1e-12);
-FeooH = C_Fe_3;
+C_Fe_3_new = max(y(1,:), 1e-12);
 
-% recompute Fe reduction with updated Fe(III), still using carbon cap
-Fe_gate = FeooH ./ (FeooH + KFEMonod);
-C_to_Fe = min(FeC_frac_max .* RC_after_O2, RC_after_O2 .* Fe_gate);   % umol C/L/yr
-R_FeRed = 4 .* C_to_Fe;                                                % umol Fe2+/L/yr
+% Under-relaxed FeOOH update for the NEXT outer iteration.
+% Do not recompute R_FeRed inside the same iteration.
+relax_Fe3 = 0.5;
+FeooH = (1 - relax_Fe3) .* FeooH_old + relax_Fe3 .* C_Fe_3_new;
+
+% Use the same C_to_Fe / R_FeRed that was used to solve Fe2 in this iteration.
 RC_after_Fe = max(RC_after_O2 - C_to_Fe, 0);
 
 % % ------------------------ SO4 budget pre-diagnostic ----------------------
@@ -625,8 +677,8 @@ RC_after_Fe = max(RC_after_O2 - C_to_Fe, 0);
 % Use positivity-preserving finite-volume depletion-front solver.
 [Sulfate, R_SRR, R_AOM_actual, SO4_diag] = Solve_SO4_FV_Front();
 
-fprintf('SO4 FV front: min=%.3e uM, front=%.2f cm, I_SRR=%.3f, I_AOM=%.3f, I_pot=%.3f umol/cm2/yr\n', ...
-    SO4_diag.min_SO4, SO4_diag.front_depth, SO4_diag.I_SRR, SO4_diag.I_AOM, SO4_diag.I_demand_pot);
+% fprintf('SO4 FV front: min=%.3e uM, front=%.2f cm, I_SRR=%.3f, I_AOM=%.3f, I_pot=%.3f umol/cm2/yr\n', ...
+%     SO4_diag.min_SO4, SO4_diag.front_depth, SO4_diag.I_SRR, SO4_diag.I_AOM, SO4_diag.I_demand_pot);
 
 % % ------------------------ SULFATE ---------------------------------------
 % 
@@ -727,21 +779,51 @@ end
 R_HS_Ox = max(Kreox .* HS_conc .* Oxygen, 0);   % umol/L/yr
 
 % ---------------- Fe diagnostics ----------------
-I_FeRed = trapz(z_sed, R_FeRed) .* 1e-3;   % umol Fe/cm2/yr
+
+I_FeRed = trapz(z_sed, R_FeRed) .* 1e-3;
 I_FeOx  = trapz(z_sed, R_FeOx)  .* 1e-3;
 I_FeS   = trapz(z_sed, R_FeS)   .* 1e-3;
 
-% temporary: currently Fe2 uses DH2S as diffusion coefficient
+I_Fe_irrig = trapz(z_sed, Alpha_Bioirrig .* max(C_Fe - Feinit, 0)) .* 1e-3;
+
 J_Fe2_top_up = DH2S .* ((C_Fe(2) - C_Fe(1)) ./ dz_sed) .* 1e-3;
 
+Fe_sink_total = I_FeOx + I_FeS + I_Fe_irrig + J_Fe2_top_up;
+
 fprintf('\n--- Fe diagnostics ---\n');
+fprintf('I_FeRed_pot          = %.3f umol Fe/cm2/yr\n', I_FeRed_pot);
+fprintf('I_Fe external supp = %.3f umol Fe/cm2/yr\n', I_Fe_supply_ext);
+fprintf('I_Fe transport supply= %.3f umol Fe/cm2/yr\n', I_Fe_transport_supply);
+fprintf('I_Fe recycle lag     = %.3f umol Fe/cm2/yr\n', I_Fe_recycle_lag);
+fprintf('I_Fe supply cap      = %.3f umol Fe/cm2/yr\n', I_Fe_supply_cap);
+fprintf('Fe supply scale      = %.3f\n', Fe_supply_scale);
 fprintf('I_FeRed          = %.3f umol Fe/cm2/yr\n', I_FeRed);
 fprintf('I_FeOx           = %.3f umol Fe/cm2/yr\n', I_FeOx);
 fprintf('I_FeS            = %.3f umol Fe/cm2/yr\n', I_FeS);
+fprintf('I_Fe irrigation  = %.3f umol Fe/cm2/yr\n', I_Fe_irrig);
 fprintf('J_Fe2 top up     = %.3f umol Fe/cm2/yr\n', J_Fe2_top_up);
+fprintf('Fe sink total    = %.3f umol Fe/cm2/yr\n', Fe_sink_total);
 fprintf('max Fe2          = %.1f uM\n', max(C_Fe));
 fprintf('max Fe3          = %.1f umol/g\n', max(FeooH));
-fprintf('Fe sink/source   = %.3f\n', (I_FeOx + I_FeS + J_Fe2_top_up) / max(I_FeRed,1e-12));
+fprintf('Fe sink/source   = %.3f\n', Fe_sink_total / max(I_FeRed,1e-12));
+
+Fe_budget_residual = Fe_sink_total - I_FeRed;
+
+fprintf('Fe residual       = %.3f umol Fe/cm2/yr\n', Fe_budget_residual);
+fprintf('Fe residual/source= %.3f\n', Fe_budget_residual ./ max(I_FeRed,1e-12));
+Fe_sink_no_top = I_FeOx + I_FeS + I_Fe_irrig;
+
+
+fprintf('Fe sink no top    = %.3f umol Fe/cm2/yr\n', Fe_sink_no_top);
+fprintf('Fe no-top/source  = %.3f\n', Fe_sink_no_top ./ max(I_FeRed,1e-12));
+
+HS_used_for_Fe2 = C_HS_used_for_Fe2 ./ (1 + ((10.^(6 - pH_used_for_Fe2)) ./ K_HS));
+R_FeS_used_for_Fe2 = kFeS .* C_Fe .* HS_used_for_Fe2;
+I_FeS_used_for_Fe2 = trapz(z_sed, R_FeS_used_for_Fe2) .* 1e-3;
+
+fprintf('I_FeS used Fe2   = %.3f umol Fe/cm2/yr\n', I_FeS_used_for_Fe2);
+fprintf('Fe used sink/source = %.3f\n', ...
+    (I_FeOx + I_FeS_used_for_Fe2 + I_Fe_irrig + J_Fe2_top_up) ./ max(I_FeRed,1e-12));
 fprintf('----------------------\n\n');
 
 % ------------------------ METHANE ---------------------------------------
@@ -795,20 +877,20 @@ R_AOM_pot = k_AOM .* CH4;
 R_AOM_lag = R_AOM;
 
 % ---------------- Redox partition diagnostics ----------------
-I_RC     = trapz(z_sed, RC .* 1E9) .* 1e-3;        % umol C/cm2/yr
-I_respi  = trapz(z_sed, R_respi) .* 1e-3;          % umol C/cm2/yr
-I_FeC    = trapz(z_sed, R_FeRed ./ 4) .* 1e-3;     % umol C/cm2/yr
-I_SO4C   = trapz(z_sed, 2 .* R_SRR) .* 1e-3;       % umol C/cm2/yr
-I_methC  = trapz(z_sed, 2 .* Rate_Meth) .* 1e-3;   % umol C/cm2/yr
-
-fprintf('\n--- Carbon redox partition ---\n');
-fprintf('I_RC total       = %.3f umol C/cm2/yr\n', I_RC);
-fprintf('I_O2 respiration = %.3f (%.1f%%)\n', I_respi, 100*I_respi/max(I_RC,1e-12));
-fprintf('I_Fe reduction   = %.3f (%.1f%%)\n', I_FeC,   100*I_FeC/max(I_RC,1e-12));
-fprintf('I_SO4 reduction  = %.3f (%.1f%%)\n', I_SO4C,  100*I_SO4C/max(I_RC,1e-12));
-fprintf('I_methanogenesis = %.3f (%.1f%%)\n', I_methC, 100*I_methC/max(I_RC,1e-12));
-fprintf('Closure ratio     = %.3f\n', (I_respi + I_FeC + I_SO4C + I_methC)/max(I_RC,1e-12));
-fprintf('------------------------------\n\n');
+% I_RC     = trapz(z_sed, RC .* 1E9) .* 1e-3;        % umol C/cm2/yr
+% I_respi  = trapz(z_sed, R_respi) .* 1e-3;          % umol C/cm2/yr
+% I_FeC    = trapz(z_sed, R_FeRed ./ 4) .* 1e-3;     % umol C/cm2/yr
+% I_SO4C   = trapz(z_sed, 2 .* R_SRR) .* 1e-3;       % umol C/cm2/yr
+% I_methC  = trapz(z_sed, 2 .* Rate_Meth) .* 1e-3;   % umol C/cm2/yr
+% 
+% fprintf('\n--- Carbon redox partition ---\n');
+% fprintf('I_RC total       = %.3f umol C/cm2/yr\n', I_RC);
+% fprintf('I_O2 respiration = %.3f (%.1f%%)\n', I_respi, 100*I_respi/max(I_RC,1e-12));
+% fprintf('I_Fe reduction   = %.3f (%.1f%%)\n', I_FeC,   100*I_FeC/max(I_RC,1e-12));
+% fprintf('I_SO4 reduction  = %.3f (%.1f%%)\n', I_SO4C,  100*I_SO4C/max(I_RC,1e-12));
+% fprintf('I_methanogenesis = %.3f (%.1f%%)\n', I_methC, 100*I_methC/max(I_RC,1e-12));
+% fprintf('Closure ratio     = %.3f\n', (I_respi + I_FeC + I_SO4C + I_methC)/max(I_RC,1e-12));
+% fprintf('------------------------------\n\n');
 
 % ------------------------------- Coupled Carbonate -----------------------------------
 CaCO3_init = 1E-4 .* (F_CaCO3) .* (poros(1) / (1 - poros(1))) / (v_burial(1) * rho);  % gr/grDw
@@ -912,21 +994,46 @@ R1_carb = R_carb_form - R_carb_disso .* (1E3 * 1E6 * 1E-2 * rho .* max(1 - poros
 
 % -------------------------- Convergence coefficient ----------------------
 
-alpha_converge(1,iteration) = F_diff;
+if iteration > 1
+    abs_Fe2 = max(abs(C_Fe(:) - C_Fe_prev(:)));
+    rel_Fe2 = abs_Fe2 ./ max(max(abs(C_Fe_prev(:))), 1);
+    
+    % If Fe2 is low, absolute uM-scale changes should not dominate convergence.
+    conv_Fe2 = min(rel_Fe2, abs_Fe2 ./ 25);
+    conv_Fe3 = max(abs(FeooH(:) - FeooH_prev(:))) ./ max(max(abs(FeooH_prev(:))), 1);
+    conv_SO4 = max(abs(Sulfate(:) - Sulfate_prev(:))) ./ max(max(abs(Sulfate_prev(:))), 1);
+    conv_CH4 = max(abs(CH4(:) - CH4_prev(:))) ./ max(max(abs(CH4_prev(:))), 1);
+    conv_ALK = max(abs(ALK(:) - ALK_prev(:))) ./ max(max(abs(ALK_prev(:))), 1);
+    conv_pH  = max(abs(pH(:) - pH_prev(:))) ./ max(max(abs(pH_prev(:))), 1);
+conv_FeS = max(abs(R_FeS(:) - R_FeS_prev(:))) ./ max(max(abs(R_FeS_prev(:))), 1);
 
-% alpha_converge(isnan(alpha_converge))=[];
+abs_HS = max(abs(C_HS(:) - C_HS_prev(:)));
+conv_HS_abs = abs_HS ./ 200;   % diagnostic only, not hard convergence
 
-     if size(alpha_converge,2) > 2
-        
-       K_converge = (alpha_converge(1,iteration)-alpha_converge(1,iteration-1))/alpha_converge(1,iteration-1);
-  
-     end
+conv_all = max([conv_Fe2, conv_Fe3, conv_SO4, conv_CH4, conv_ALK, conv_pH, conv_FeS]);
 
-       iteration = iteration + 1;
+fprintf('Outer iteration %d convergence: Fe2 %.3f, Fe3 %.3f, SO4 %.3f, HSabs %.3f, FeS %.3f, CH4 %.3f, ALK %.3f, pH %.3f, max %.3f\n', ...
+    iteration, conv_Fe2, conv_Fe3, conv_SO4, conv_HS_abs, conv_FeS, conv_CH4, conv_ALK, conv_pH, conv_all);
+else
+    conv_all = Inf;
+end
 
+C_Fe_prev    = C_Fe;
+FeooH_prev   = FeooH;
+Sulfate_prev = Sulfate;
+CH4_prev     = CH4;
+ALK_prev     = ALK;
+pH_prev      = pH;
+C_HS_prev = C_HS;
+R_FeS_prev = R_FeS;
+
+if iteration >= min_outer_iter && conv_all < conv_tol
+    break
+end
+
+iteration = iteration + 1;
 count_loop = count_loop + 1;
-
-end  % iteration ends here 
+end
 
 % 
 % % -------------------------- Sulfur budget diagnostics --------------------------

@@ -8,7 +8,7 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     Config.nmesh = 1000;
 
     % ---------------- Physical structure ----------------
-    Config.vbottom = 0.5;         % cm / yr   (river-audited baseline)
+    Config.vbottom = 0.1;         % cm / yr   (river-audited baseline)
     Config.vbottom_fluid = 0;     % cm / yr
 
     Config.porostop = 0.9;
@@ -35,8 +35,8 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     Config.Pinitial = 0;          % uM
 
     % ---------------- Fluxes ----------------
-    Config.NPP = 800;             % g / m2 / yr
-    Config.BE  = 0.15;
+    Config.NPP = 200;             % g / m2 / yr
+    Config.BE  = 0.1;
     Config.F_FeOx  = 2.5;%2;          % mmol / m2 / d
     Config.F_CaCO3 = 2;%;          % g / m2 / yr
 
