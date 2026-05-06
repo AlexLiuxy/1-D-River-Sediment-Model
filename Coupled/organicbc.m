@@ -1,7 +1,7 @@
 function res = organicbc(C_orga,C_orgb)
-global NPP v_burial poros rho Bioturb BE
+global F_lab_OM v_burial poros rho Bioturb
 
-NPP1 = BE * NPP * 1E-4; %gram/cm2/year
+NPP1 = F_lab_OM; %gram/cm2/year
 v_burial1 = v_burial(1,1);  %cm/year
 poros1 = poros(1,1); 
 A1 = rho * (1-poros1);

@@ -21,7 +21,8 @@ global R_respi R_SRR R_FeRed RC_after_Fe R_DIC_prod R_ALK_prod R_AOM R_CH4Ox Ksp
 global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_Ox kapatite
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor 
-global T_future Rate_Meth Salinity pH K_HS R_AOM_lag R_AOM_actual R_AOM_pot SO4_diag F_FeOx
+global T_future Rate_Meth Salinity pH K_HS R_AOM_lag R_AOM_actual R_AOM_pot SO4_diag F_FeOx 
+global F_lab_OM F_ref_OM C_organic_lab C_organic_ref C_organic_total
 %global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
     
 
@@ -112,9 +113,16 @@ global T_future Rate_Meth Salinity pH K_HS R_AOM_lag R_AOM_actual R_AOM_pot SO4_
 
 
 
-Corg_top = Config.Corg_top;
+    % Corg_top = Config.Corg_top;
     BE = Config.BE;
     NPP = Config.NPP;
+    f_lab = Config.f_lab;
+    f_lab = max(0, min(1, f_lab));
+    
+    F_OM_total = BE * NPP * 1E-4;   % current transitional OM input
+    F_lab_OM   = f_lab * F_OM_total;
+    F_ref_OM   = (1 - f_lab) * F_OM_total;
+
     if Config.use_hydro_npp_multiplier
         NPP = NPP * Hydro.NPP_multiplier;
     end
@@ -203,27 +211,35 @@ hold on
 
 if Bioturbtop == 0
 
-x = linspace(0,Lbottom,n);
-CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
-C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
-
+        x = linspace(0,Lbottom,n);
+        CorgInit  = (BE * NPP * 1E-4)./(v_burial(1) * rho * (1-poros(1)));
+        C_organic = CorgInit*exp(-cumsum(k_sed./v_burial.*dz_sed));
+        BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+    
 else 
-
-nmesh=1000;
-x=linspace(0,Lbottom,nmesh);
-solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
-sol = bvp4c(@organicODE,@organicbc,solinit);
-x = linspace(0,Lbottom,n);
-y = deval(sol,x);
-
-if min(y) < 0
-    fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
-end
-y = max(y, 1e-12);
-
-C_organic = y(1,:);
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+    
+    nmesh=1000;
+    x=linspace(0,Lbottom,nmesh);
+    solinit = bvpinit(linspace(0,Lbottom,nmesh),[0 0]);
+    sol = bvp4c(@organicODE,@organicbc,solinit);
+    x = linspace(0,Lbottom,n);
+    y = deval(sol,x);
+    
+    if min(y) < 0
+        fprintf('Initial Organic is negative in the current iteration! Minimum：%.2e\n', min(y));
+    end
+    y = max(y, 1e-12);
+    
+    C_organic = y(1,:);
+    C_organic_lab = C_organic;
+    
+    solid_flux = rho .* max(1 - poros, 1e-6) .* max(v_burial, 1e-12);
+    C_organic_ref = F_ref_OM ./ solid_flux;
+    
+    C_organic_total = C_organic_lab + C_organic_ref;
+    
+    C_organic = C_organic_total;  % only for plotting/output compatibility
+    BEsed_org = C_organic_total ./ max(C_organic_total(1), 1e-12);
 
 end
 % if Bioturbtop == 0
@@ -246,7 +262,7 @@ end
 % end
 % ---------------------------- OXYGEN -------------------------------------
 
-RC = Temp_factor.*k_sed.*C_organic.*rho.*((1-poros)./(12)); % molCorg/cm3/yr mineralization rate
+RC = Temp_factor .* k_sed .* C_organic_lab .* rho .* ((1-poros)./12); % molCorg/cm3/yr mineralization rate
 O2_root = zeros(1,n);
 
 % Solving ODE
@@ -450,7 +466,16 @@ y = max(y, 1e-12);
 
 C_organic = y(1,:);
 
-BEsed_org = C_organic./C_organic(1);  % Burial Efficiency of Organic
+C_organic_lab = C_organic;
+
+solid_flux = rho .* max(1 - poros, 1e-6) .* max(v_burial, 1e-12);
+C_organic_ref = F_ref_OM ./ solid_flux;
+
+C_organic_total = C_organic_lab + C_organic_ref;
+
+C_organic = C_organic_total;  % only for plotting/output compatibility
+BEsed_org = C_organic_total ./ max(C_organic_total(1), 1e-12);
+
 
 end
 % if Bioturbtop == 0
@@ -473,7 +498,7 @@ end
 % end
 % ---------------------------- OXYGEN -------------------------------------
 
-RC = Temp_factor.*k_sed.*C_organic.*rho.*((1-poros)./(12)) + RC_root; % molCorg/cm3/yr mineralization rate
+RC = Temp_factor .* k_sed .* C_organic_lab .* rho .* ((1-poros)./12) + RC_root; % molCorg/cm3/yr mineralization rate
 
 % Solving ODE
 
@@ -548,9 +573,16 @@ I_Fe_recycle_lag = trapz(z_sed, max(R_FeOx,0)) .* 1e-3;
 
 I_Fe_supply_ext = F_FeOx .* 36.5;  % mmol/m2/d -> umol/cm2/yr
 
-I_Fe_supply_cap = I_Fe_supply_ext ...
-                + I_Fe_transport_supply ...
-                + I_Fe_recycle_lag;
+Fe_recycle_cap_frac = 0.25;
+
+I_Fe_recycle_eff = min(I_Fe_recycle_lag, ...
+                       Fe_recycle_cap_frac * I_Fe_supply_ext);
+
+% I_Fe_supply_cap = I_Fe_supply_ext + I_Fe_recycle_eff;
+
+I_Fe_supply_cap = I_Fe_supply_ext ;%...
+                % + I_Fe_transport_supply ...
+                % + I_Fe_recycle_lag;
 
 Fe_supply_scale = min(1, I_Fe_supply_cap ./ max(I_FeRed_pot, 1e-12));
 
@@ -679,7 +711,14 @@ RC_after_Fe = max(RC_after_O2 - C_to_Fe, 0);
 
 % fprintf('SO4 FV front: min=%.3e uM, front=%.2f cm, I_SRR=%.3f, I_AOM=%.3f, I_pot=%.3f umol/cm2/yr\n', ...
 %     SO4_diag.min_SO4, SO4_diag.front_depth, SO4_diag.I_SRR, SO4_diag.I_AOM, SO4_diag.I_demand_pot);
-
+fprintf('SO4 I_demand_pot = %.3f\n', SO4_diag.I_demand_pot);
+fprintf('SO4 I_SRR        = %.3f\n', SO4_diag.I_SRR);
+fprintf('SO4 I_AOM        = %.3f\n', SO4_diag.I_AOM);
+fprintf('SO4 I_irrig      = %.3f\n', SO4_diag.I_irrig_source);
+fprintf('SO4 J_top_down   = %.3f\n', SO4_diag.J_top_down);
+fprintf('SO4 supply/demand = %.3f\n', ...
+    (SO4_diag.I_irrig_source + SO4_diag.J_top_down) ./ ...
+    max(SO4_diag.I_SRR + SO4_diag.I_AOM, 1e-12));
 % % ------------------------ SULFATE ---------------------------------------
 % 
 % % Solving ODE
@@ -780,50 +819,61 @@ R_HS_Ox = max(Kreox .* HS_conc .* Oxygen, 0);   % umol/L/yr
 
 % ---------------- Fe diagnostics ----------------
 
-I_FeRed = trapz(z_sed, R_FeRed) .* 1e-3;
-I_FeOx  = trapz(z_sed, R_FeOx)  .* 1e-3;
-I_FeS   = trapz(z_sed, R_FeS)   .* 1e-3;
+% I_FeRed = trapz(z_sed, R_FeRed) .* 1e-3;
+% I_FeOx  = trapz(z_sed, R_FeOx)  .* 1e-3;
+% I_FeS   = trapz(z_sed, R_FeS)   .* 1e-3;
+% 
+% I_Fe_irrig = trapz(z_sed, Alpha_Bioirrig .* max(C_Fe - Feinit, 0)) .* 1e-3;
+% 
+% J_Fe2_top_up = DH2S .* ((C_Fe(2) - C_Fe(1)) ./ dz_sed) .* 1e-3;
+% 
+% Fe_sink_total = I_FeOx + I_FeS + I_Fe_irrig + J_Fe2_top_up;
 
-I_Fe_irrig = trapz(z_sed, Alpha_Bioirrig .* max(C_Fe - Feinit, 0)) .* 1e-3;
+% fprintf('\n--- Fe diagnostics ---\n');
+% fprintf('I_FeRed_pot          = %.3f umol Fe/cm2/yr\n', I_FeRed_pot);
+% fprintf('I_Fe external supp = %.3f umol Fe/cm2/yr\n', I_Fe_supply_ext);
+% fprintf('I_Fe transport supply= %.3f umol Fe/cm2/yr\n', I_Fe_transport_supply);
+% fprintf('I_Fe recycle lag     = %.3f umol Fe/cm2/yr\n', I_Fe_recycle_lag);
+% fprintf('I_Fe supply cap      = %.3f umol Fe/cm2/yr\n', I_Fe_supply_cap);
+% fprintf('Fe supply scale      = %.3f\n', Fe_supply_scale);
+% fprintf('I_FeRed          = %.3f umol Fe/cm2/yr\n', I_FeRed);
+% fprintf('I_FeOx           = %.3f umol Fe/cm2/yr\n', I_FeOx);
+% fprintf('I_FeS            = %.3f umol Fe/cm2/yr\n', I_FeS);
+% fprintf('I_Fe irrigation  = %.3f umol Fe/cm2/yr\n', I_Fe_irrig);
+% fprintf('J_Fe2 top up     = %.3f umol Fe/cm2/yr\n', J_Fe2_top_up);
+% fprintf('Fe sink total    = %.3f umol Fe/cm2/yr\n', Fe_sink_total);
+% fprintf('max Fe2          = %.1f uM\n', max(C_Fe));
+% fprintf('max Fe3          = %.1f umol/g\n', max(FeooH));
+% fprintf('Fe sink/source   = %.3f\n', Fe_sink_total / max(I_FeRed,1e-12));
+% 
+% Fe_budget_residual = Fe_sink_total - I_FeRed;
+% 
+% fprintf('Fe residual       = %.3f umol Fe/cm2/yr\n', Fe_budget_residual);
+% fprintf('Fe residual/source= %.3f\n', Fe_budget_residual ./ max(I_FeRed,1e-12));
+% Fe_sink_no_top = I_FeOx + I_FeS + I_Fe_irrig;
+% 
+% 
+% fprintf('Fe sink no top    = %.3f umol Fe/cm2/yr\n', Fe_sink_no_top);
+% fprintf('Fe no-top/source  = %.3f\n', Fe_sink_no_top ./ max(I_FeRed,1e-12));
+% 
+% HS_used_for_Fe2 = C_HS_used_for_Fe2 ./ (1 + ((10.^(6 - pH_used_for_Fe2)) ./ K_HS));
+% R_FeS_used_for_Fe2 = kFeS .* C_Fe .* HS_used_for_Fe2;
+% I_FeS_used_for_Fe2 = trapz(z_sed, R_FeS_used_for_Fe2) .* 1e-3;
+% 
+% fprintf('I_FeS used Fe2   = %.3f umol Fe/cm2/yr\n', I_FeS_used_for_Fe2);
+% fprintf('Fe used sink/source = %.3f\n', ...
+%     (I_FeOx + I_FeS_used_for_Fe2 + I_Fe_irrig + J_Fe2_top_up) ./ max(I_FeRed,1e-12));
 
-J_Fe2_top_up = DH2S .* ((C_Fe(2) - C_Fe(1)) ./ dz_sed) .* 1e-3;
 
-Fe_sink_total = I_FeOx + I_FeS + I_Fe_irrig + J_Fe2_top_up;
+fprintf('SO4 min = %.2f uM\n', min(Sulfate));
+fprintf('SO4 bottom = %.2f uM\n', Sulfate(end));
 
-fprintf('\n--- Fe diagnostics ---\n');
-fprintf('I_FeRed_pot          = %.3f umol Fe/cm2/yr\n', I_FeRed_pot);
-fprintf('I_Fe external supp = %.3f umol Fe/cm2/yr\n', I_Fe_supply_ext);
-fprintf('I_Fe transport supply= %.3f umol Fe/cm2/yr\n', I_Fe_transport_supply);
-fprintf('I_Fe recycle lag     = %.3f umol Fe/cm2/yr\n', I_Fe_recycle_lag);
-fprintf('I_Fe supply cap      = %.3f umol Fe/cm2/yr\n', I_Fe_supply_cap);
-fprintf('Fe supply scale      = %.3f\n', Fe_supply_scale);
-fprintf('I_FeRed          = %.3f umol Fe/cm2/yr\n', I_FeRed);
-fprintf('I_FeOx           = %.3f umol Fe/cm2/yr\n', I_FeOx);
-fprintf('I_FeS            = %.3f umol Fe/cm2/yr\n', I_FeS);
-fprintf('I_Fe irrigation  = %.3f umol Fe/cm2/yr\n', I_Fe_irrig);
-fprintf('J_Fe2 top up     = %.3f umol Fe/cm2/yr\n', J_Fe2_top_up);
-fprintf('Fe sink total    = %.3f umol Fe/cm2/yr\n', Fe_sink_total);
-fprintf('max Fe2          = %.1f uM\n', max(C_Fe));
-fprintf('max Fe3          = %.1f umol/g\n', max(FeooH));
-fprintf('Fe sink/source   = %.3f\n', Fe_sink_total / max(I_FeRed,1e-12));
-
-Fe_budget_residual = Fe_sink_total - I_FeRed;
-
-fprintf('Fe residual       = %.3f umol Fe/cm2/yr\n', Fe_budget_residual);
-fprintf('Fe residual/source= %.3f\n', Fe_budget_residual ./ max(I_FeRed,1e-12));
-Fe_sink_no_top = I_FeOx + I_FeS + I_Fe_irrig;
-
-
-fprintf('Fe sink no top    = %.3f umol Fe/cm2/yr\n', Fe_sink_no_top);
-fprintf('Fe no-top/source  = %.3f\n', Fe_sink_no_top ./ max(I_FeRed,1e-12));
-
-HS_used_for_Fe2 = C_HS_used_for_Fe2 ./ (1 + ((10.^(6 - pH_used_for_Fe2)) ./ K_HS));
-R_FeS_used_for_Fe2 = kFeS .* C_Fe .* HS_used_for_Fe2;
-I_FeS_used_for_Fe2 = trapz(z_sed, R_FeS_used_for_Fe2) .* 1e-3;
-
-fprintf('I_FeS used Fe2   = %.3f umol Fe/cm2/yr\n', I_FeS_used_for_Fe2);
-fprintf('Fe used sink/source = %.3f\n', ...
-    (I_FeOx + I_FeS_used_for_Fe2 + I_Fe_irrig + J_Fe2_top_up) ./ max(I_FeRed,1e-12));
+idx_SO4_10 = find(Sulfate < 10, 1);
+if isempty(idx_SO4_10)
+    fprintf('SO4 depletion front <10 uM: none\n');
+else
+    fprintf('SO4 depletion front <10 uM: %.2f cm\n', z_sed(idx_SO4_10));
+end
 fprintf('----------------------\n\n');
 
 % ------------------------ METHANE ---------------------------------------
@@ -1211,7 +1261,9 @@ ax.LineWidth = 2;
 
 subplot(m_plot,n_plot,4);
 
-plot(Sulfate,z_sed,'lineWidth',2); axis ij
+plot(Sulfate,z_sed,'lineWidth',2); 
+% xlim([0 SO4init]); 
+axis ij
 title('[SO_4] (\muM)')
 box on
 grid on
