@@ -7,7 +7,7 @@ function Params = Params_Static()
     Params.k_SO4 = 20;           % uM
     Params.KFEMonod = 1000;%200;       % umol / g
 
-    Params.DSO4 = 310;%300;           % cm2 / yr
+    Params.DSO4 = 150;%300;           % cm2 / yr
     Params.DCH4 = 300;           % cm2 / yr
     Params.DH2S = 300;           % cm2 / yr
     Params.DO2  = 300;           % cm2 / yr
@@ -16,11 +16,11 @@ function Params = Params_Static()
 
     Params.Kreox = 500;          % 1 / umol / L / yr
     Params.kFeOx = 10;%10;           % 1 / umol / L / yr
-    Params.kFeS  = 10;%1;%10;           % 1 / umol / L / yr
+    Params.kFeS  = 1;%1;%10;           % 1 / umol / L / yr
 
     Params.K_CH4_SO4   = 100;    % uM
     Params.K_CH4_O2    = 1;      % uM
-    Params.k_AOM       = 1;%0.2;%1.0;    % 1 / yr
+    Params.k_AOM       = 0.2;%0.2;%1.0;    % 1 / yr
     Params.k_aerobic_CH4 = 6;    % 1 / yr
 
     Params.Ksp_ca = 4.5e5;%3000;        % uM^2
@@ -31,14 +31,15 @@ function Params = Params_Static()
     Params.n_power_CaCO32 = 0.11;
     Params.n_power_CaCO33 = 4;
 
-    Params.Calcium_activity = 1;%1.0;%0.6;
-    Params.CO3_activity     = 1;%1.0;%0.6;
+    Params.Calcium_activity = 0.6;%1.0;%0.6;
+    Params.CO3_activity     = 0.6;%1.0;%0.6;
 
     Params.P_C_ratio = 0.0094;
     Params.Q10   = 2;
     Params.T_ref = 25;
 
-    Params.FeC_frac_max = 0.35;   
+    Params.FeC_frac_max = 0.35;
+    Params.Fe_inventory_factor = 0.4;  % global fixed factor, first candidate
 
     % extras already used by old core
 %     Params.KFeS = 2500;

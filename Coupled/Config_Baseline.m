@@ -8,44 +8,45 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     Config.nmesh = 1000;
 
     % ---------------- Physical structure ----------------
-    Config.vbottom = 0.5;         % cm / yr   (river-audited baseline)
+    Config.vbottom = 0.2;         % cm / yr   (river-audited baseline)
     Config.vbottom_fluid = 0;     % cm / yr
 
     Config.porostop = 0.9;
     Config.porosbottom = 0.7;
     Config.porosscale = 3;
 
-    Config.Bioturbtop = 10;%1;%10;       % cm2 / yr
-    Config.Bioturbbottom = 1;%0.05;%1;     % cm2 / yr
+    Config.Bioturbtop = 1;%1;%10;       % cm2 / yr
+    Config.Bioturbbottom = 0.05;%0.05;%1;     % cm2 / yr
     Config.bioturbscale = 3;
 
-    Config.Bioirrig_top = 100;%20;%100;    % 1 / yr
+    Config.Bioirrig_top = 20;%20;%100;    % 1 / yr
     Config.Bioirrig_bottom = 0;
-    Config.Bioirrig_scale = 0.75;%1.0;%0.75;
+    Config.Bioirrig_scale =1;%1.0;%0.75;
 
-    Config.f_lab = 0.8;   % fraction of total OM input entering labile/reactive pool
+    Config.f_lab = 0.6;   % fraction of total OM input entering labile/reactive pool
+    Config.k_ref_factor = 0;   % first test: k_ref = 0.03 * k_sed
     % ---------------- Boundary concentrations ----------------
     Config.O2init   = 250;%150;        % uM
-    Config.SO4init  = 29000;%200;        % uM
-    Config.DICinit  = 3400;%1200;%3400;       % uM
-    Config.HCO3init = 3500;%1100;%3500;        % uM
-    Config.Calcium  = 5700;%1000;%5700;       % uM
+    Config.SO4init  = 200;%200;        % uM
+    Config.DICinit  = 1200;%1200;%3400;       % uM
+    Config.HCO3init = 1100;%1100;%3500;        % uM
+    Config.Calcium  = 1000;%1000;%5700;       % uM
     Config.CH4init  = 0;          % uM
     Config.Feinit   = 0;          % uM
     Config.HSinit   = 0;          % uM
     Config.Pinitial = 0;          % uM
 
     % ---------------- Fluxes ----------------
-    Config.NPP = 800;             % g / m2 / yr
-    Config.BE  = 0.15;
-    Config.F_FeOx  = 2.5;%2;          % mmol / m2 / d
+    Config.NPP = 400;             % g / m2 / yr
+    Config.BE  = 0.1;
+    Config.F_FeOx  = 1.5;%2;          % mmol / m2 / d , external reactive Fe input forcing
     Config.F_CaCO3 = 2;%;          % g / m2 / yr
 
     % ---------------- Temperature / OM age ----------------
     Config.T_future = 25;%25;
     Config.ageinit = 0.1;
     Config.age_root = 1;
-    Config.Salinity = 38;%0.1;
+    Config.Salinity = 0.1;%0.1;
 
     % ---------------- Root-zone extras ----------------
     Config.DOC_root_1 = 0;

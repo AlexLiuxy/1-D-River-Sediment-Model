@@ -11,7 +11,6 @@
 % RUN_RTM_1D
 % Sediment Diagenesis Model - Functionized for Sensitivity Analysis
 clear all
-tic
 % ----------------------------- INPUT PARAMETERS ---------------------------
 
 global v_burial Mineral_Mass z_sed Oxygen Sulfate Corg_top
@@ -22,7 +21,7 @@ global v_burial_Fluid CO3_activity Calcium_activity NPP kFeS FeooH Feinit R_HS_O
 global k_AOM k_aerobic_CH4 K_CH4_SO4 K_CH4_O2 CH4init Pinitial DCH4 kFeOx KFEMonod Sulfide Rapat CaCO3 F_CaCO3 O2_root
 global C_HS C_Fe n_power_CaCO31 n_power_CaCO32 k_calcite_dis1 n_power_CaCO33 k_calcite_dis2 CaCO3_init Temp_factor 
 global T_future Rate_Meth Salinity pH K_HS R_AOM_lag R_AOM_actual R_AOM_pot SO4_diag F_FeOx 
-global F_lab_OM F_ref_OM C_organic_lab C_organic_ref C_organic_total
+global F_lab_OM F_ref_OM C_organic_lab C_organic_ref C_organic_total k_ref_factor Fe_inventory_factor
 %global KFe_HS Iron_conc R_iron Iron_C P_apaeq R1_carb_disso R1_carb_form
     
 
@@ -58,6 +57,7 @@ global F_lab_OM F_ref_OM C_organic_lab C_organic_ref C_organic_total
     kFeOx = Params.kFeOx;
     kFeS  = Params.kFeS;
     FeC_frac_max = Params.FeC_frac_max;
+    Fe_inventory_factor = Params.Fe_inventory_factor;
 
     K_CH4_SO4 = Params.K_CH4_SO4;
     K_CH4_O2  = Params.K_CH4_O2;
@@ -116,7 +116,10 @@ global F_lab_OM F_ref_OM C_organic_lab C_organic_ref C_organic_total
     % Corg_top = Config.Corg_top;
     BE = Config.BE;
     NPP = Config.NPP;
+    
     f_lab = Config.f_lab;
+    k_ref_factor = Config.k_ref_factor;
+    
     f_lab = max(0, min(1, f_lab));
     
     F_OM_total = BE * NPP * 1E-4;   % current transitional OM input
@@ -262,7 +265,10 @@ end
 % end
 % ---------------------------- OXYGEN -------------------------------------
 
-RC = Temp_factor .* k_sed .* C_organic_lab .* rho .* ((1-poros)./12); % molCorg/cm3/yr mineralization rate
+RC_lab = Temp_factor .* k_sed .* C_organic_lab .* rho .* ((1-poros)./12);
+
+RC = RC_lab; % molCorg/cm3/yr mineralization rate
+
 O2_root = zeros(1,n);
 
 % Solving ODE
@@ -306,7 +312,11 @@ num_OPD = min(num_OPD1);
 mm_count = 0;
 for i=1:n
 
-    FeOxInit  = (F_FeOx.*36.5)./(v_burial(1) * rho * (1-poros(1)));
+    FeOxInit_raw = (F_FeOx .* 36.5) ./ ...
+    (v_burial(1) .* rho .* max(1 - poros(1), 1e-6));
+
+    FeOxInit = Fe_inventory_factor .* FeOxInit_raw;
+
     Ironoxy(1,i) = 0.01.*FeOxInit.*((1/(1+exp(z_sed(1,i)-OPD)))+2*exp(-((z_sed(1,i)-OPD)^2)/2));
     mm_count=mm_count+1;
     FeOx(1,mm_count)=Ironoxy(1,i);
@@ -385,7 +395,7 @@ O2_root(1,i_root) = 0;
 
 end
 
- 
+
 % Seagrass POC release 
 
 muPOC_root = 4; % value for the center of rootzone in normal distribution
@@ -498,7 +508,10 @@ end
 % end
 % ---------------------------- OXYGEN -------------------------------------
 
-RC = Temp_factor .* k_sed .* C_organic_lab .* rho .* ((1-poros)./12) + RC_root; % molCorg/cm3/yr mineralization rate
+RC_lab = Temp_factor .* k_sed .* C_organic_lab .* rho .* ((1-poros)./12);
+
+
+RC = RC_lab + RC_root; % molCorg/cm3/yr mineralization rate
 
 % Solving ODE
 
@@ -653,9 +666,10 @@ C_Fe = y(1,:);
 % RC_after_Fe = max(RC_after_O2 - R_FeRed ./ 4, 0);   % umol C / L / yr
 
 R_FeOx = kFeOx .* C_Fe .* Oxygen;
-Fe_3_init = 36.5 .* F_FeOx .* (poros(1)/(1-poros(1))) / (v_burial(1) * rho);  % umol/g
+Fe_3_init_raw = 36.5 .* F_FeOx .* (poros(1) ./ max(1 - poros(1), 1e-6)) ./ (v_burial(1) .* rho);  % umol/g
+Fe_3_init = Fe_inventory_factor .* Fe_3_init_raw;
+% Fe3 top boundary is a fixed FeOOH inventory derived from Fe input using a global Fe_inventory_factor.
 
-% Fe3 top boundary is now flux-controlled by F_FeOx in Fe3_bc.m.
 % Do not convert F_FeOx into a fixed FeOOH surface concentration here.
 
 % Solve Fe(III) with the current Fe3_ODE instead of explicit forward update
@@ -874,6 +888,18 @@ if isempty(idx_SO4_10)
 else
     fprintf('SO4 depletion front <10 uM: %.2f cm\n', z_sed(idx_SO4_10));
 end
+
+I_FeRed = trapz(z_sed, R_FeRed) .* 1e-3;
+I_FeS   = trapz(z_sed, R_FeS) .* 1e-3;
+I_FeOx_int = trapz(z_sed, R_FeOx) .* 1e-3;
+
+fprintf('I_FeRed = %.3f umol Fe/cm2/yr\n', I_FeRed);
+fprintf('I_FeS   = %.3f umol Fe/cm2/yr\n', I_FeS);
+fprintf('I_FeOx  = %.3f umol Fe/cm2/yr\n', I_FeOx_int);
+fprintf('FeS/FeRed = %.3f\n', I_FeS ./ max(I_FeRed,1e-12));
+fprintf('max Fe2 = %.2f uM\n', max(C_Fe));
+fprintf('max FeOOH = %.2f umol/g\n', max(FeooH));
+
 fprintf('----------------------\n\n');
 
 % ------------------------ METHANE ---------------------------------------
