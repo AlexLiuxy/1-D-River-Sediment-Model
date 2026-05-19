@@ -37,8 +37,19 @@ function Config = Config_Baseline()
     % ---------------- Fluxes ----------------
     Config.NPP = 200;             % g / m2 / yr
     Config.BE  = 0.1;
+<<<<<<< Updated upstream
     Config.F_FeOx  = 2;          % mmol / m2 / d
     Config.F_CaCO3 = 10;          % g / m2 / yr
+=======
+    
+    % Main OM forcing for future PDE / USGS runs.
+    % Unit follows current convention: g OM / cm2 / yr.
+    % If empty, use legacy fallback: BE * NPP * 1E-4.
+    Config.F_OM_total = [];
+    
+    Config.F_FeOx  = 1.5;%2;          % mmol / m2 / d , external reactive Fe input forcing
+    Config.F_CaCO3 = 2;%;          % g / m2 / yr
+>>>>>>> Stashed changes
 
     % ---------------- Temperature / OM age ----------------
     Config.T_future = 25;
@@ -71,4 +82,16 @@ function Config = Config_Baseline()
 
     % safety cap for weak-coupling injection
     Config.max_diffusion_multiplier = 2.0;
+
+    % ---------------- Transient PDE settings ----------------
+    Config.PDE_use_steady_IC = true;   % development mode only
+    Config.PDE_do_spinup     = true;   % formal transient runs should spin up
+    
+    Config.t_spinup = 100;             % yr, first candidate
+    Config.t_final  = 3;               % yr, transient experiment length after spin-up
+    
+    Config.dt_out_spinup = 1;          % yr
+    Config.dt_out_event  = 1/365;      % yr, daily output
+    
+    Config.n_pde = Config.n;
 end

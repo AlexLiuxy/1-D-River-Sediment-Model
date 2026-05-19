@@ -706,6 +706,103 @@ R_ALK_DIC = F_diff./F_diff_DIC;
 F_diff_CH4 = DCH4.*((CH4(1,2) - CH4(1,1))./(x(1,2)-x(1,1)))*1E-3; %umol/cm2/yr
 
 
+<<<<<<< Updated upstream
+=======
+% % ----------------------------- OUTPUT PACKAGING ---------------------------
+%     Outputs.z_sed = z_sed;
+%     Outputs.pH_profile = pH;
+%     Outputs.CH4_profile = CH4;
+%     Outputs.O2_profile = Oxygen;
+% %     Outputs.SO4_profile = Sulfate;
+% %     Outputs.DIC_profile = C_DIC;
+% 
+%     % Core Diagnostics
+%     Outputs.Max_CH4 = max(CH4);
+% 
+% 
+%     Outputs.Org_Bottom = C_organic(end) * 100; % %gDw
+%     Outputs.ALK_Bottom = ALK(end);             % uM
+%     Outputs.pH_Bottom  = pH(end);              % 
+%     Outputs.CH4_Bottom = CH4(end);             % uM
+% %     Outputs.Org_Top    = C_organic(1) * 100; % %gDw
+% 
+%     % OPD: O2 < 1 uM
+%     idx_O2 = find(Oxygen < 1, 1);
+%     if isempty(idx_O2), Outputs.OPD = z_sed(end); else, Outputs.OPD = z_sed(idx_O2); end
+% 
+%     % SO4_Depth: SO4 降至 < 10 uM
+%     idx_SO4 = find(Sulfate < 10, 1);
+%     if isempty(idx_SO4), Outputs.SO4_Depth = z_sed(end); else, Outputs.SO4_Depth = z_sed(idx_SO4); end
+% 
+% 
+%     idx_top5 = (z_sed <= 5);                   % 圈定 0-5 cm 网格
+%     idx_bot5 = (z_sed >= (Lbottom - 5));       % 圈定底部 5 cm 网格
+%     
+%     Outputs.ALK_Bot5   = mean(ALK(idx_bot5));             % 底层 5cm 平均碱度
+%     Outputs.Sigma_Top5 = mean(sigma_carb(idx_top5));      % 表层 5cm 平均饱和度 (Omega-1)
+%     Outputs.CaCO3_Top5 = mean(CaCO3(idx_top5)) * 100;     % 表层 5cm 平均 CaCO3 (%gDw)
+%     Outputs.Integ_Meth = trapz(z_sed, Rate_Meth);         %integrated Rate_Meth
+%     
+% %     % CH4_Onset_Depth: CH4 超过 10 uM 的深度
+% %     idx_CH4 = find(CH4 > 10, 1);
+% %     if isempty(idx_CH4), Outputs.CH4_Onset = z_sed(end); else, Outputs.CH4_Onset = z_sed(idx_CH4); end
+% %     
+% %     % Sigma0_Depth: 碳酸钙饱和度 Omega-1 穿过 0 的深度 (>= 0)
+% %     idx_sigma = find(sigma_carb >= 0, 1);
+% %     if isempty(idx_sigma), Outputs.Sigma0_Depth = z_sed(end); else, Outputs.Sigma0_Depth = z_sed(idx_sigma); end
+% %     
+% %     % CaCO3_Front_Depth: 碳酸钙开始显著积累的深度 (设定阈值为 1e-4，即脱离初始极小值)
+% %     idx_CaCO3 = find(CaCO3 > 1e-4, 1);
+% %     if isempty(idx_CaCO3), Outputs.CaCO3_Front = z_sed(end); else, Outputs.CaCO3_Front = z_sed(idx_CaCO3); end
+% 
+% 
+% %     % Methane Appearance Depth (Depth where CH4 > 5 uM)
+% %     ch4_idx = find(CH4 > 5, 1);
+% %     if isempty(ch4_idx)
+% %         Outputs.CH4_Depth = Lbottom; % No significant methane
+% %     else
+% %         Outputs.CH4_Depth = z_sed(ch4_idx);
+% %     end
+% % 
+% %     Outputs.Convergence_Status = K_converge;
+% 
+
+% end % End of Function
+
+% ---------------- PDE benchmark / initial condition export ----------------
+Steady = struct();
+
+Steady.z_sed = z_sed(:);
+
+Steady.OM_total = C_organic(:);
+Steady.OM_lab   = C_organic_lab(:);
+Steady.OM_ref   = C_organic_ref(:);
+
+Steady.O2  = Oxygen(:);
+Steady.Fe2 = C_Fe(:);
+Steady.FeOOH = FeooH(:);
+Steady.SO4 = Sulfate(:);
+Steady.HS  = C_HS(:);
+Steady.CH4 = CH4(:);
+Steady.DIC = C_DIC(:);
+Steady.ALK = ALK(:);
+Steady.CaCO3 = CaCO3(:);
+
+Steady.pH = pH(:);
+Steady.CO3 = CO3_1(:);
+Steady.sigma_carb = sigma_carb(:);
+
+Steady.poros = poros(:);
+Steady.v_burial = v_burial(:);
+Steady.v_burial_Fluid = v_burial_Fluid(:);
+Steady.D_solid_mix = Bioturb(:);
+Steady.Alpha_exchange = Alpha_Bioirrig(:);
+Steady.k_sed = k_sed(:);
+
+save('Steady_IC_Current.mat', 'Steady');
+fprintf('Saved Steady_IC_Current.mat for PDE benchmark.\n');
+
+>>>>>>> Stashed changes
 % -------------------------------------------------------------------------
 % ----------------------------- PLOTS -------------------------------------
 clf;
