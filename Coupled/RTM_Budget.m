@@ -192,6 +192,72 @@ if isfield(D, 'I_Fe_supply_ext')
 else
     Budget.FeCap.I_Fe_supply_ext = NaN;
 end
+
+% =========================
+% Redox partition diagnostics
+% FV-consistent cell-sum integration.
+% =========================
+
+I_RC = sum(D.RC_uM(:)) .* dz .* 1e-3;
+I_O2_C = sum(D.R_respi(:)) .* dz .* 1e-3;
+I_Fe_C = sum(D.R_FeRed(:) ./ 4) .* dz .* 1e-3;
+I_SO4_C = sum(2 .* D.R_SRR(:)) .* dz .* 1e-3;
+I_Meth_C = sum(2 .* D.R_Meth(:)) .* dz .* 1e-3;
+
+Budget.Redox.I_RC = I_RC;
+Budget.Redox.I_O2_C = I_O2_C;
+Budget.Redox.I_Fe_C = I_Fe_C;
+Budget.Redox.I_SO4_C = I_SO4_C;
+Budget.Redox.I_Meth_C = I_Meth_C;
+
+Budget.Redox.frac_O2 = I_O2_C ./ max(I_RC, 1e-12);
+Budget.Redox.frac_Fe = I_Fe_C ./ max(I_RC, 1e-12);
+Budget.Redox.frac_SO4 = I_SO4_C ./ max(I_RC, 1e-12);
+Budget.Redox.frac_Meth = I_Meth_C ./ max(I_RC, 1e-12);
+
+% =========================
+% FeOOH availability diagnostics
+% =========================
+
+Fe_gate = S.FeOOH(:) ./ max(S.FeOOH(:) + P.KFEMonod, 1e-12);
+RC_after_O2 = max(D.RC_uM(:) - D.R_respi(:), 0);
+
+Budget.FeGate.mean_all = mean(Fe_gate);
+Budget.FeGate.mean_reactive = sum(Fe_gate .* RC_after_O2) ./ max(sum(RC_after_O2), 1e-12);
+Budget.FeGate.max = max(Fe_gate);
+Budget.FeGate.RC_after_O2_int = sum(RC_after_O2) .* dz .* 1e-3;
+
+% =========================
+% O2 budget diagnostics
+% FV-consistent cell-sum integration.
+% =========================
+
+O2 = S.O2(:);
+
+J_O2_top_down = top_solute_flux(O2, F.O2_top, phi, P.DO2, Grid.v_fluid, dz);
+
+I_O2_irrig_source = sum(phi .* Grid.Alpha_exchange(:) .* max(F.O2_top - O2, 0)) ...
+                    .* dz .* 1e-3;
+
+I_O2_resp_sink = sum(D.R_respi(:)) .* dz .* 1e-3;
+
+Budget.O2.J_TopDown = max(0, J_O2_top_down);
+Budget.O2.I_IrrigSource = I_O2_irrig_source;
+Budget.O2.I_RespSink = I_O2_resp_sink;
+
+Budget.O2.Storage = NaN;
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    dt = Result.t(end) - Result.t(end-1);
+    dO2dt = (S.O2(:) - S_prev.O2(:)) ./ max(dt, 1e-12);
+    Budget.O2.Storage = sum(phi .* dO2dt) .* dz .* 1e-3;
+end
+
+Budget.O2.Residual = Budget.O2.J_TopDown ...
+                   + Budget.O2.I_IrrigSource ...
+                   - Budget.O2.I_RespSink ...
+                   - nan0(Budget.O2.Storage);
+
 % =========================
 % Print
 % =========================
@@ -243,9 +309,31 @@ fprintf('Fe supply scale:       %.3f\n', Budget.FeCap.Scale);
 fprintf('Potential FeRed:       %.3f umol Fe/cm2/yr\n', Budget.FeCap.I_FeRed_pot);
 fprintf('External Fe cap:       %.3f umol Fe/cm2/yr\n', Budget.FeCap.I_Fe_supply_ext);
 
+fprintf('\n--- Redox partition, carbon basis ---\n');
+fprintf('I_RC:                  %.3f umol C/cm2/yr\n', Budget.Redox.I_RC);
+fprintf('O2 respiration:        %.3f (%.1f%%)\n', Budget.Redox.I_O2_C,   100*Budget.Redox.frac_O2);
+fprintf('Fe reduction C:        %.3f (%.1f%%)\n', Budget.Redox.I_Fe_C,   100*Budget.Redox.frac_Fe);
+fprintf('SO4 reduction C:       %.3f (%.1f%%)\n', Budget.Redox.I_SO4_C,  100*Budget.Redox.frac_SO4);
+fprintf('Methanogenesis C:      %.3f (%.1f%%)\n', Budget.Redox.I_Meth_C, 100*Budget.Redox.frac_Meth);
+
+fprintf('\n--- FeOOH availability ---\n');
+fprintf('Mean Fe gate:          %.4f\n', Budget.FeGate.mean_all);
+fprintf('RC-weighted Fe gate:   %.4f\n', Budget.FeGate.mean_reactive);
+fprintf('Max Fe gate:           %.4f\n', Budget.FeGate.max);
+fprintf('RC after O2 integral:  %.3f umol C/cm2/yr\n', Budget.FeGate.RC_after_O2_int);
+
+fprintf('\n--- O2 budget, umol/cm2/yr ---\n');
+fprintf('Top O2 influx:         %.3f\n', Budget.O2.J_TopDown);
+fprintf('Irrigation O2 source:  %.3f\n', Budget.O2.I_IrrigSource);
+fprintf('O2 respiration sink:   %.3f\n', Budget.O2.I_RespSink);
+fprintf('Storage:               %.3f\n', Budget.O2.Storage);
+fprintf('Residual:              %.3f\n', Budget.O2.Residual);
+
+
 fprintf('============================================\n\n');
 
 end
+
 
 function J_top_down = top_solute_flux(C, C_top, phi, D, v, dz)
 % Positive downward. Convert to umol/cm2/yr.
