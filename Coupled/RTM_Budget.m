@@ -3,7 +3,7 @@ function Budget = RTM_Budget(Result)
 % PDE-consistent Fe, CH4, and FeOOH budget diagnostics.
 %
 % Solute budgets use phi-weighted reaction integrals because PDE storage is:
-%   d(phi*C)/dt = transport + phi*reaction + phi*exchange
+%   d(phi*C)/dt = transport + reaction + phi*exchange
 %
 % Solid budgets use A-weighted reaction integrals:
 %   A = rho*(1-phi)
@@ -119,6 +119,80 @@ Budget.FeOOH.Net = Budget.FeOOH.TopInput + Budget.FeOOH.I_FeOx ...
                    - nan0(Budget.FeOOH.Storage);
 
 % =========================
+% OM solid budget
+% =========================
+
+OM_lab = S.OM_lab(:);
+OM_ref = S.OM_ref(:);
+
+F_OM_lab_top = F.F_lab_OM;
+F_OM_ref_top = F.F_ref_OM;
+
+F_OM_lab_bottom = A(end) .* Grid.v_solid(end) .* OM_lab(end);
+F_OM_ref_bottom = A(end) .* Grid.v_solid(end) .* OM_ref(end);
+
+% OM reaction rates are in g/gDW/yr.
+I_OM_lab_reaction = trapz(z, A .* max(-Result.Rates_final.OM_lab(:), 0));
+I_OM_ref_reaction = trapz(z, A .* max(-Result.Rates_final.OM_ref(:), 0));
+
+Budget.OM.TopLab = F_OM_lab_top;
+Budget.OM.TopRef = F_OM_ref_top;
+Budget.OM.TopTotal = F_OM_lab_top + F_OM_ref_top;
+
+Budget.OM.BottomLab = F_OM_lab_bottom;
+Budget.OM.BottomRef = F_OM_ref_bottom;
+Budget.OM.BottomTotal = F_OM_lab_bottom + F_OM_ref_bottom;
+
+Budget.OM.ReactLab = I_OM_lab_reaction;
+Budget.OM.ReactRef = I_OM_ref_reaction;
+Budget.OM.ReactTotal = I_OM_lab_reaction + I_OM_ref_reaction;
+
+Budget.OM.StorageLab = NaN;
+Budget.OM.StorageRef = NaN;
+
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    dt = Result.t(end) - Result.t(end-1);
+
+    dOMlabdt = (S.OM_lab(:) - S_prev.OM_lab(:)) ./ max(dt, 1e-12);
+    dOMrefdt = (S.OM_ref(:) - S_prev.OM_ref(:)) ./ max(dt, 1e-12);
+
+    Budget.OM.StorageLab = trapz(z, A .* dOMlabdt);
+    Budget.OM.StorageRef = trapz(z, A .* dOMrefdt);
+end
+
+Budget.OM.ResidualLab = Budget.OM.TopLab ...
+                      - Budget.OM.BottomLab ...
+                      - Budget.OM.ReactLab ...
+                      - nan0(Budget.OM.StorageLab);
+
+Budget.OM.ResidualRef = Budget.OM.TopRef ...
+                      - Budget.OM.BottomRef ...
+                      - Budget.OM.ReactRef ...
+                      - nan0(Budget.OM.StorageRef);
+
+% =========================
+% Fe cap diagnostics
+% =========================
+
+if isfield(D, 'Fe_supply_scale')
+    Budget.FeCap.Scale = D.Fe_supply_scale;
+else
+    Budget.FeCap.Scale = NaN;
+end
+
+if isfield(D, 'I_FeRed_pot')
+    Budget.FeCap.I_FeRed_pot = D.I_FeRed_pot;
+else
+    Budget.FeCap.I_FeRed_pot = NaN;
+end
+
+if isfield(D, 'I_Fe_supply_ext')
+    Budget.FeCap.I_Fe_supply_ext = D.I_Fe_supply_ext;
+else
+    Budget.FeCap.I_Fe_supply_ext = NaN;
+end
+% =========================
 % Print
 % =========================
 
@@ -151,6 +225,23 @@ fprintf('FeOOH reduction sink: %.3f\n', Budget.FeOOH.I_FeRed);
 fprintf('Bottom burial loss:   %.3f\n', Budget.FeOOH.BottomBurial);
 fprintf('Storage:              %.3f\n', Budget.FeOOH.Storage);
 fprintf('Residual:             %.3f\n', Budget.FeOOH.Net);
+
+fprintf('\n--- OM budget, g/cm2/yr ---\n');
+fprintf('Top lab OM input:      %.5f\n', Budget.OM.TopLab);
+fprintf('Top ref OM input:      %.5f\n', Budget.OM.TopRef);
+fprintf('Bottom lab burial:     %.5f\n', Budget.OM.BottomLab);
+fprintf('Bottom ref burial:     %.5f\n', Budget.OM.BottomRef);
+fprintf('Lab OM reaction:       %.5f\n', Budget.OM.ReactLab);
+fprintf('Ref OM reaction:       %.5f\n', Budget.OM.ReactRef);
+fprintf('Lab OM storage:        %.5f\n', Budget.OM.StorageLab);
+fprintf('Ref OM storage:        %.5f\n', Budget.OM.StorageRef);
+fprintf('Lab OM residual:       %.5f\n', Budget.OM.ResidualLab);
+fprintf('Ref OM residual:       %.5f\n', Budget.OM.ResidualRef);
+
+fprintf('\n--- Fe cap diagnostics ---\n');
+fprintf('Fe supply scale:       %.3f\n', Budget.FeCap.Scale);
+fprintf('Potential FeRed:       %.3f umol Fe/cm2/yr\n', Budget.FeCap.I_FeRed_pot);
+fprintf('External Fe cap:       %.3f umol Fe/cm2/yr\n', Budget.FeCap.I_Fe_supply_ext);
 
 fprintf('============================================\n\n');
 

@@ -77,6 +77,20 @@ Compare = add_row(Compare, 'CaCO3_bottom_pct', ...
     100 .* Ode.CaCO3(end), ...
     100 .* P.CaCO3(end));
 
+Compare = add_row(Compare, 'OM_top_pct', ...
+    100 .* max(getfield_or_nan(Ode, 'OM_total_top'), NaN), ...
+    100 .* (P.OM_lab(1) + P.OM_ref(1)));
+
+Compare = add_row(Compare, 'OM_bottom_pct', ...
+    100 .* max(getfield_or_nan(Ode, 'OM_total_bottom'), NaN), ...
+    100 .* (P.OM_lab(end) + P.OM_ref(end)));
+
+Compare = add_row(Compare, 'OM_lab_top_pct_PDE_only', ...
+    NaN, 100 .* P.OM_lab(1));
+
+Compare = add_row(Compare, 'OM_ref_top_pct_PDE_only', ...
+    NaN, 100 .* P.OM_ref(1));
+
 % Optional integrated diagnostics if available.
 if isfield(Ode, 'RC') && isfield(D, 'RC_uM')
     Compare = add_row(Compare, 'I_RC_umolC_cm2_yr', ...
@@ -164,5 +178,14 @@ else
     depth = z(idx);
 end
 
+
+end
+
+function v = getfield_or_nan(S, name)
+if isfield(S, name)
+    v = S.(name);
+else
+    v = NaN;
+end
 
 end

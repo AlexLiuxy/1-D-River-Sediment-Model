@@ -1,5 +1,61 @@
 # MATLAB Model Source Code
 
+## File: Build_Forcing_PDE.m
+```matlab
+function Forcing = Build_Forcing_PDE(Config)
+% BUILD_FORCING_PDE
+% Constant forcing for the first FV-MOL PDE benchmark.
+Forcing.T = Config.T_future;
+Forcing.Salinity = Config.Salinity;
+Forcing.O2_top  = Config.O2init;
+Forcing.SO4_top = Config.SO4init;
+Forcing.DIC_top = Config.DICinit;
+Forcing.ALK_top = Config.HCO3init;
+Forcing.Ca_top  = Config.Calcium;
+Forcing.CH4_top = Config.CH4init;
+Forcing.Fe_top  = Config.Feinit;
+Forcing.HS_top  = Config.HSinit;
+Forcing.F_FeOx  = Config.F_FeOx;     % mmol/m2/d
+Forcing.F_CaCO3 = Config.F_CaCO3;    % g/m2/yr
+% Main OM forcing.
+% Current stable ODE convention: BE * NPP * 1e-4 = g OM / cm2 / yr.
+if isfield(Config, 'F_OM_total') && ~isempty(Config.F_OM_total)
+    F_OM_total = Config.F_OM_total;
+else
+    F_OM_total = Config.BE * Config.NPP * 1e-4;
+end
+f_lab = max(0, min(1, Config.f_lab));
+Forcing.F_OM_total = F_OM_total;
+Forcing.F_lab_OM   = f_lab .* F_OM_total;
+Forcing.F_ref_OM   = (1 - f_lab) .* F_OM_total;
+end
+```
+
+## File: Build_Grid_1D.m
+```matlab
+function Grid = Build_Grid_1D(Config, Params)
+% BUILD_GRID_1D
+% Build the 1-D sediment grid and depth-dependent physical fields.
+Grid.z = linspace(0, Config.Lbottom, Config.n).';
+Grid.n = numel(Grid.z);
+Grid.dz = Grid.z(2) - Grid.z(1);
+z = Grid.z;
+Grid.poros = Config.porosbottom + ...
+    (Config.porostop - Config.porosbottom) .* exp(-z ./ Config.porosscale);
+Grid.D_solid_mix = Config.Bioturbbottom + ...
+    (Config.Bioturbtop - Config.Bioturbbottom) .* exp(-z ./ Config.bioturbscale);
+Grid.Alpha_exchange = Config.Bioirrig_bottom + ...
+    (Config.Bioirrig_top - Config.Bioirrig_bottom) .* exp(-z ./ Config.Bioirrig_scale);
+Grid.v_solid = Config.vbottom .* ...
+    (1 - Config.porosbottom) ./ max(1 - Grid.poros, 1e-6);
+Grid.v_fluid = Config.vbottom_fluid .* ...
+    (1 + Config.porosbottom) ./ max(1 + Grid.poros, 1e-6);
+age = Config.ageinit + cumsum(Grid.dz ./ max(Grid.v_solid, 1e-12));
+Grid.k_sed = 10.^(-0.95 .* log10(age) - 0.81);
+Grid.rho = Params.rho;
+end
+```
+
 ## File: CH4_bc.m
 ```matlab
 
@@ -109,6 +165,14 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     Config.use_hydro_diffusion_multiplier = false;
     % safety cap for weak-coupling injection
     Config.max_diffusion_multiplier = 2.0;
+    % ---------------- Transient PDE settings ----------------
+    Config.PDE_use_steady_IC = true;   % development mode only
+    Config.PDE_do_spinup     = true;   % formal transient runs should spin up
+    Config.t_spinup = 100;             % yr, first candidate
+    Config.t_final  = 3;               % yr, transient experiment length after spin-up
+    Config.dt_out_spinup = 1;          % yr
+    Config.dt_out_event  = 1/365;      % yr, daily output
+    Config.n_pde = Config.n;
 end
 ```
 
@@ -353,6 +417,48 @@ function Hydro = Hydro_Preprocessor(Config, Params)
 end
 ```
 
+## File: Initialize_PDE_State.m
+```matlab
+function State = Initialize_PDE_State(Grid, Forcing, Config, Params)
+% INITIALIZE_PDE_STATE
+% Simple positive initial condition for PDE spin-up.
+%
+% This is not a formal steady state. It only gives ode15s a reasonable
+% nonnegative starting point.
+z = Grid.z;
+n = Grid.n;
+rho = Params.rho;
+A_solid = rho .* max(1 - Grid.poros, 1e-6);
+solid_flux = A_solid .* max(Grid.v_solid, 1e-12);
+% Labile OM: depositional top value with first-order burial decay.
+OM_lab_top = Forcing.F_lab_OM ./ max(solid_flux(1), 1e-12);
+decay_int = cumsum((Grid.k_sed ./ max(Grid.v_solid, 1e-12)) .* Grid.dz);
+State.OM_lab = max(OM_lab_top .* exp(-decay_int), 1e-12);
+% Refractory OM: preserved inventory approximation.
+State.OM_ref = max(Forcing.F_ref_OM ./ max(solid_flux, 1e-12), 0);
+% FeOOH top inventory from external Fe flux.
+% F_FeOx: mmol/m2/d -> umol/cm2/yr by *36.5.
+F_FeOOH = Forcing.F_FeOx .* 36.5;
+FeOOH_top = F_FeOOH ./ max(solid_flux(1), 1e-12);
+if isfield(Params, 'Fe_inventory_factor')
+    FeOOH_top = Params.Fe_inventory_factor .* FeOOH_top;
+end
+State.FeOOH = max(FeOOH_top .* exp(-z ./ 3), 1e-12);
+% CaCO3 solid top inventory from depositional flux.
+F_CaCO3_cm2 = Forcing.F_CaCO3 .* 1e-4;  % g/m2/yr -> g/cm2/yr
+CaCO3_top = F_CaCO3_cm2 ./ max(solid_flux(1), 1e-12);
+State.CaCO3 = max(CaCO3_top .* exp(-z ./ 10), 0);
+% Solutes.
+State.O2  = max(Forcing.O2_top .* exp(-z ./ 1.5), 0);
+State.Fe2 = zeros(n,1);
+State.SO4 = max(Forcing.SO4_top .* ones(n,1), 0);
+State.HS  = zeros(n,1);
+State.CH4 = max(Forcing.CH4_top .* ones(n,1), 0);
+State.DIC = max(Forcing.DIC_top .* ones(n,1), 1e-12);
+State.ALK = max(Forcing.ALK_top .* ones(n,1), 1e-12);
+end
+```
+
 ## File: O2_bc.m
 ```matlab
 
@@ -452,6 +558,27 @@ dydx = [ NR / v_burial_1
 end
 ```
 
+## File: Pack_State.m
+```matlab
+function Y = Pack_State(State)
+% PACK_STATE
+% Convert state struct to one column vector for ode15s.
+Y = [
+    State.OM_lab(:)
+    State.OM_ref(:)
+    State.FeOOH(:)
+    State.CaCO3(:)
+    State.O2(:)
+    State.Fe2(:)
+    State.SO4(:)
+    State.HS(:)
+    State.CH4(:)
+    State.DIC(:)
+    State.ALK(:)
+];
+end
+```
+
 ## File: Params_Static.m
 ```matlab
 function Params = Params_Static()
@@ -525,6 +652,98 @@ global Rviv1 Rapat
 end
 ```
 
+## File: Plot_PDE_Result.m
+```matlab
+function Plot_PDE_Result(Result)
+% PLOT_PDE_RESULT
+% Basic diagnostic plot for the first PDE spin-up.
+Grid = Result.Grid;
+S = Result.State_final;
+D = Result.Diag_final;
+z = Grid.z;
+figure('Name', 'FV-MOL PDE Result', 'Color', 'w');
+clf;
+n_plot = 6;
+m_plot = 3;
+subplot(m_plot,n_plot,1);
+plot((S.OM_lab + S.OM_ref) .* 100, z, 'LineWidth', 2); axis ij
+title('Organic (%gDW)');
+ylabel('Depth (cm)');
+grid on; box on
+subplot(m_plot,n_plot,2);
+plot(S.O2, z, 'LineWidth', 2); axis ij
+title('O_2 (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,3);
+plot(S.Fe2, z, 'LineWidth', 2); axis ij
+title('Fe^{2+} (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,4);
+plot(S.SO4, z, 'LineWidth', 2); axis ij
+title('SO_4 (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,5);
+plot(S.HS, z, 'LineWidth', 2); axis ij
+title('H_2S total (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,6);
+plot(S.CH4, z, 'LineWidth', 2); axis ij
+title('CH_4 (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,7);
+plot(S.CaCO3 .* 100, z, 'LineWidth', 2); axis ij
+title('CaCO_3 (%gDW)');
+ylabel('Depth (cm)');
+grid on; box on
+subplot(m_plot,n_plot,8);
+plot(S.DIC, z, 'LineWidth', 2); axis ij
+title('DIC (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,9);
+plot(S.ALK, z, 'LineWidth', 2); axis ij
+title('ALK (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,10);
+plot(D.H2CO3, z, 'LineWidth', 2); axis ij
+title('H_2CO_3 (\muM)');
+grid on; box on
+subplot(m_plot,n_plot,11);
+plot(D.pH, z, 'LineWidth', 2); axis ij
+title('pH');
+grid on; box on
+subplot(m_plot,n_plot,12);
+plot(D.RC_uM, z, 'LineWidth', 2); axis ij
+title('Mineralization (\muM/yr)');
+grid on; box on
+subplot(m_plot,n_plot,13);
+plot(S.FeOOH, z, 'LineWidth', 2); axis ij
+title('FeOOH (\mumol/g)');
+ylabel('Depth (cm)');
+grid on; box on
+subplot(m_plot,n_plot,14);
+plot(D.R_SRR ./ 365, z, 'LineWidth', 2); axis ij
+title('SRR (\muM/d)');
+grid on; box on
+subplot(m_plot,n_plot,15);
+plot(D.R_Meth ./ 365, z, 'LineWidth', 2); axis ij
+title('Methanogenesis (\muM/d)');
+grid on; box on
+subplot(m_plot,n_plot,16);
+plot(D.R_FeS ./ 365, z, 'LineWidth', 2); axis ij
+title('FeS formation (\muM/d)');
+grid on; box on
+subplot(m_plot,n_plot,17);
+plot(D.sigma_carb, z, 'LineWidth', 2); axis ij
+title('\Omega - 1');
+grid on; box on
+subplot(m_plot,n_plot,18);
+plot(D.R_carb_net_solid, z, 'LineWidth', 2); axis ij
+title('Net CaCO_3 rxn (g/g/yr)');
+grid on; box on
+drawnow;
+end
+```
+
 ## File: River_Carbonate.m
 ```matlab
 function [pH, CO3, H2CO3] = River_Carbonate(ALK, DIC, T, S, P)
@@ -588,9 +807,847 @@ function res = alk_balance_residual(H, ALK, DIC, B_T, K1, K2, Kb, Kw)
 end
 ```
 
+## File: RTM_Budget.m
+```matlab
+function Budget = RTM_Budget(Result)
+% RTM_BUDGET
+% PDE-consistent Fe, CH4, and FeOOH budget diagnostics.
+%
+% Solute budgets use phi-weighted reaction integrals because PDE storage is:
+%   d(phi*C)/dt = transport + phi*reaction + phi*exchange
+%
+% Solid budgets use A-weighted reaction integrals:
+%   A = rho*(1-phi)
+Grid = Result.Grid;
+S = Result.State_final;
+D = Result.Diag_final;
+P = Result.Params;
+F = Result.Forcing;
+z = Grid.z(:);
+dz = Grid.dz;
+phi = Grid.poros(:);
+A = Grid.rho .* max(1 - phi, 1e-6);
+Budget = struct();
+% =========================
+% CH4 budget
+% =========================
+CH4 = S.CH4(:);
+J_CH4_top_down = top_solute_flux(CH4, F.CH4_top, phi, P.DCH4, Grid.v_fluid, dz);
+J_CH4_top_up = max(0, -J_CH4_top_down);
+I_CH4_irrig_sink = trapz(z, phi .* Grid.Alpha_exchange(:) .* max(CH4 - F.CH4_top, 0)) .* 1e-3;
+Budget.CH4.I_Meth = trapz(z, D.R_Meth(:)) .* 1e-3;
+Budget.CH4.I_AOM  = trapz(z, D.R_AOM(:)) .* 1e-3;
+Budget.CH4.I_Ox   = trapz(z, D.R_CH4Ox(:)) .* 1e-3;
+Budget.CH4.I_IrrigSink = I_CH4_irrig_sink;
+Budget.CH4.J_TopUp = J_CH4_top_up;
+Budget.CH4.Source = Budget.CH4.I_Meth;
+Budget.CH4.Sink = Budget.CH4.I_AOM + Budget.CH4.I_Ox + ...
+                  Budget.CH4.I_IrrigSink + Budget.CH4.J_TopUp;
+Budget.CH4.Storage = NaN;
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    dt = Result.t(end) - Result.t(end-1);
+    dCH4dt = (S.CH4(:) - S_prev.CH4(:)) ./ max(dt, 1e-12);
+    Budget.CH4.Storage = trapz(z, phi .* dCH4dt) .* 1e-3;
+end
+Budget.CH4.Residual = Budget.CH4.Source - Budget.CH4.Sink - nan0(Budget.CH4.Storage);
+Budget.CH4.SinkSourceRatio = Budget.CH4.Sink ./ max(Budget.CH4.Source, 1e-12);
+% =========================
+% Fe2 budget
+% =========================
+Fe2 = S.Fe2(:);
+J_Fe2_top_down = top_solute_flux(Fe2, F.Fe_top, phi, P.DH2S, Grid.v_fluid, dz);
+J_Fe2_top_up = max(0, -J_Fe2_top_down);
+I_Fe2_irrig_sink = trapz(z, phi .* Grid.Alpha_exchange(:) .* max(Fe2 - F.Fe_top, 0)) .* 1e-3;
+Budget.Fe2.I_FeRed = trapz(z, D.R_FeRed(:)) .* 1e-3;
+Budget.Fe2.I_FeOx  = trapz(z, D.R_FeOx(:)) .* 1e-3;
+Budget.Fe2.I_FeS   = trapz(z, D.R_FeS(:)) .* 1e-3;
+Budget.Fe2.I_IrrigSink = I_Fe2_irrig_sink;
+Budget.Fe2.J_TopUp = J_Fe2_top_up;
+Budget.Fe2.Source = Budget.Fe2.I_FeRed;
+Budget.Fe2.Sink = Budget.Fe2.I_FeOx + Budget.Fe2.I_FeS + ...
+                  Budget.Fe2.I_IrrigSink + Budget.Fe2.J_TopUp;
+Budget.Fe2.Storage = NaN;
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    dt = Result.t(end) - Result.t(end-1);
+    dFe2dt = (S.Fe2(:) - S_prev.Fe2(:)) ./ max(dt, 1e-12);
+    Budget.Fe2.Storage = trapz(z, phi .* dFe2dt) .* 1e-3;
+end
+Budget.Fe2.Residual = Budget.Fe2.Source - Budget.Fe2.Sink - nan0(Budget.Fe2.Storage);
+Budget.Fe2.SinkSourceRatio = Budget.Fe2.Sink ./ max(Budget.Fe2.Source, 1e-12);
+% =========================
+% FeOOH solid budget
+% =========================
+FeOOH = S.FeOOH(:);
+F_FeOOH_top = F.F_FeOx .* 36.5;
+if isfield(P, 'Fe_inventory_factor')
+    F_FeOOH_top = P.Fe_inventory_factor .* F_FeOOH_top;
+end
+F_FeOOH_bottom = A(end) .* Grid.v_solid(end) .* FeOOH(end);
+% FeOOH reaction terms are equivalent to phi-weighted Fe solute rates.
+Budget.FeOOH.TopInput = F_FeOOH_top;
+Budget.FeOOH.BottomBurial = F_FeOOH_bottom;
+Budget.FeOOH.I_FeRed = trapz(z, D.R_FeRed(:)) .* 1e-3;
+Budget.FeOOH.I_FeOx  = trapz(z, D.R_FeOx(:)) .* 1e-3;
+Budget.FeOOH.Storage = NaN;
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    dt = Result.t(end) - Result.t(end-1);
+    dFeOOHdt = (S.FeOOH(:) - S_prev.FeOOH(:)) ./ max(dt, 1e-12);
+    Budget.FeOOH.Storage = trapz(z, A .* dFeOOHdt);
+end
+Budget.FeOOH.Net = Budget.FeOOH.TopInput + Budget.FeOOH.I_FeOx ...
+                   - Budget.FeOOH.I_FeRed - Budget.FeOOH.BottomBurial ...
+                   - nan0(Budget.FeOOH.Storage);
+% =========================
+% Print
+% =========================
+fprintf('\n================ RTM Budget ================\n');
+fprintf('\n--- CH4 budget, umol/cm2/yr ---\n');
+fprintf('Meth source:          %.3f\n', Budget.CH4.I_Meth);
+fprintf('AOM sink:             %.3f\n', Budget.CH4.I_AOM);
+fprintf('O2 oxidation sink:    %.3f\n', Budget.CH4.I_Ox);
+fprintf('Irrigation sink:      %.3f\n', Budget.CH4.I_IrrigSink);
+fprintf('Top diffusive efflux: %.3f\n', Budget.CH4.J_TopUp);
+fprintf('Storage:              %.3f\n', Budget.CH4.Storage);
+fprintf('Sink/source ratio:    %.3f\n', Budget.CH4.SinkSourceRatio);
+fprintf('Residual:             %.3f\n', Budget.CH4.Residual);
+fprintf('\n--- Fe2 budget, umol/cm2/yr ---\n');
+fprintf('Fe reduction source:  %.3f\n', Budget.Fe2.I_FeRed);
+fprintf('Fe oxidation sink:    %.3f\n', Budget.Fe2.I_FeOx);
+fprintf('FeS sink:             %.3f\n', Budget.Fe2.I_FeS);
+fprintf('Irrigation sink:      %.3f\n', Budget.Fe2.I_IrrigSink);
+fprintf('Top diffusive efflux: %.3f\n', Budget.Fe2.J_TopUp);
+fprintf('Storage:              %.3f\n', Budget.Fe2.Storage);
+fprintf('Sink/source ratio:    %.3f\n', Budget.Fe2.SinkSourceRatio);
+fprintf('Residual:             %.3f\n', Budget.Fe2.Residual);
+fprintf('\n--- FeOOH budget, umol/cm2/yr ---\n');
+fprintf('Top FeOOH input:      %.3f\n', Budget.FeOOH.TopInput);
+fprintf('FeOOH regeneration:   %.3f\n', Budget.FeOOH.I_FeOx);
+fprintf('FeOOH reduction sink: %.3f\n', Budget.FeOOH.I_FeRed);
+fprintf('Bottom burial loss:   %.3f\n', Budget.FeOOH.BottomBurial);
+fprintf('Storage:              %.3f\n', Budget.FeOOH.Storage);
+fprintf('Residual:             %.3f\n', Budget.FeOOH.Net);
+fprintf('============================================\n\n');
+end
+function J_top_down = top_solute_flux(C, C_top, phi, D, v, dz)
+% Positive downward. Convert to umol/cm2/yr.
+C = C(:);
+phi = phi(:);
+v = v(:);
+if v(1) >= 0
+    C_adv = C_top;
+else
+    C_adv = C(1);
+end
+F_top = -phi(1) .* D .* (C(1) - C_top) ./ (0.5 .* dz) ...
+        + phi(1) .* v(1) .* C_adv;
+J_top_down = F_top .* 1e-3;
+end
+function x = nan0(x)
+if isnan(x)
+    x = 0;
+end
+end
+```
+
+## File: RTM_Carbonate.m
+```matlab
+function Carb = RTM_Carbonate(ALK, DIC, T, S)
+% RTM_CARBONATE
+% Vectorized carbonate speciation solver for the transient PDE RHS.
+%
+% Uses fixed-iteration vectorized bisection in log10([H+] in uM).
+% This avoids fzero and roots inside ode15s RHS calls.
+%
+% Inputs:
+%   ALK, DIC : uM, vectors or scalars
+%   T        : deg C
+%   S        : salinity
+%
+% Outputs in Carb:
+%   pH, CO3, H2CO3, HCO3, BOH4, OH
+ALK = max(real(ALK(:)), 1e-12);
+DIC = max(real(DIC(:)), 1e-12);
+if nargin < 3 || isempty(T)
+    T = 25;
+end
+if nargin < 4 || isempty(S)
+    S = 0.1;
+end
+T_K = T + 273.15;
+% River/low-salinity boron approximation inherited from current code.
+B_T = 400 .* (S ./ 35);
+lnK1 = 2.83655 - 2307.1266 ./ T_K - 1.5529413 .* log(T_K) ...
+     - (0.20760841 + 4.0484 ./ T_K) .* sqrt(S) ...
+     + 0.08468345 .* S - 0.00654208 .* S.^1.5 ...
+     + log(1 - 0.001005 .* S);
+K1 = exp(lnK1) .* 1e6;
+lnK2 = -9.226508 - 3351.6106 ./ T_K - 0.2005743 .* log(T_K) ...
+     + (-0.106901773 - 23.9722 ./ T_K) .* sqrt(S) ...
+     + 0.1130822 .* S - 0.00846934 .* S.^1.5 ...
+     + log(1 - 0.001005 .* S);
+K2 = exp(lnK2) .* 1e6;
+lnKb = (-8966.90 - 2890.53 .* sqrt(S) - 77.942 .* S ...
+      + 1.728 .* S.^1.5 - 0.0996 .* S.^2) ./ T_K ...
+     + 148.0248 + 137.1942 .* sqrt(S) + 1.62142 .* S ...
+     + (-24.4344 - 25.085 .* sqrt(S) - 0.2474 .* S) .* log(T_K) ...
+     + 0.053105 .* sqrt(S) .* T_K;
+Kb = exp(lnKb) .* 1e6;
+Kw = exp(148.96502 - 13847.26 ./ T_K - 23.6521 .* log(T_K) ...
+   + (118.67 ./ T_K - 5.977 + 1.0495 .* log(T_K)) .* sqrt(S) ...
+   - 0.01615 .* S) .* 1e12;
+% Broadcast constants to vector size.
+K1 = K1 .* ones(size(ALK));
+K2 = K2 .* ones(size(ALK));
+Kb = Kb .* ones(size(ALK));
+Kw = Kw .* ones(size(ALK));
+B_T = B_T .* ones(size(ALK));
+% Bracket log10(H_uM).
+% Current River_Carbonate used -7 to 2; keep same safe range.
+lo = -7 .* ones(size(ALK));
+hi =  2 .* ones(size(ALK));
+flo = alk_residual(10.^lo, ALK, DIC, B_T, K1, K2, Kb, Kw);
+fhi = alk_residual(10.^hi, ALK, DIC, B_T, K1, K2, Kb, Kw);
+% If a rare point is not bracketed, keep the nearest endpoint.
+bad = flo .* fhi > 0;
+% Fixed iteration count is predictable and ode15s-friendly.
+for iter = 1:50
+    mid = 0.5 .* (lo + hi);
+    fmid = alk_residual(10.^mid, ALK, DIC, B_T, K1, K2, Kb, Kw);
+    % Residual generally decreases with increasing H.
+    go_right = fmid > 0;
+    lo(go_right) = mid(go_right);
+    hi(~go_right) = mid(~go_right);
+end
+logH = 0.5 .* (lo + hi);
+% Fallback for non-bracketed cells.
+if any(bad)
+    use_lo = abs(flo) < abs(fhi);
+    logH(bad & use_lo) = lo(bad & use_lo);
+    logH(bad & ~use_lo) = hi(bad & ~use_lo);
+end
+H = max(10.^logH, 1e-12);
+denom = 1 + K1 ./ H + K1 .* K2 ./ H.^2;
+denom = max(denom, 1e-30);
+H2CO3 = DIC ./ denom;
+HCO3  = DIC .* (K1 ./ H) ./ denom;
+CO3   = DIC .* (K1 .* K2 ./ H.^2) ./ denom;
+BOH4  = B_T .* (Kb ./ H) ./ (1 + Kb ./ H);
+OH    = Kw ./ H;
+Carb = struct();
+Carb.pH    = 6 - log10(H);
+Carb.H2CO3 = max(real(H2CO3), 1e-12);
+Carb.HCO3  = max(real(HCO3),  1e-12);
+Carb.CO3   = max(real(CO3),   1e-12);
+Carb.BOH4  = max(real(BOH4),  0);
+Carb.OH    = max(real(OH),    0);
+end
+function res = alk_residual(H, ALK, DIC, B_T, K1, K2, Kb, Kw)
+    H = max(H, 1e-12);
+    denom = 1 + K1 ./ H + K1 .* K2 ./ H.^2;
+    denom = max(denom, 1e-30);
+    HCO3 = DIC .* (K1 ./ H) ./ denom;
+    CO3  = DIC .* (K1 .* K2 ./ H.^2) ./ denom;
+    BOH4 = B_T .* (Kb ./ H) ./ (1 + Kb ./ H);
+    OH   = Kw ./ H;
+    TA_calc = HCO3 + 2 .* CO3 + BOH4 + OH - H;
+    res = TA_calc - ALK;
+end
+```
+
+## File: RTM_Compare.m
+```matlab
+function Compare = RTM_Compare(Ode, Pde)
+% RTM_COMPARE
+% Quantitative ODE-vs-PDE benchmark table.
+%
+% Usage:
+%   Run ODE script first and export Ode struct.
+%   Run PDE and get Result.
+%   Compare = RTM_Compare(Ode, Result);
+P = Pde.State_final;
+D = Pde.Diag_final;
+G = Pde.Grid;
+z_pde = G.z(:);
+Compare = table();
+Compare = add_row(Compare, 'OPD_cm', ...
+    first_depth_below(Ode.z, Ode.O2, 1, Ode.z(end)), ...
+    first_depth_below(z_pde, P.O2, 1, z_pde(end)));
+Compare = add_row(Compare, 'SO4_depth_10_cm', ...
+    first_depth_below(Ode.z, Ode.SO4, 10, Ode.z(end)), ...
+    first_depth_below(z_pde, P.SO4, 10, z_pde(end)));
+Compare = add_row(Compare, 'O2_bottom_uM', ...
+    Ode.O2(end), P.O2(end));
+Compare = add_row(Compare, 'SO4_bottom_uM', ...
+    Ode.SO4(end), P.SO4(end));
+Compare = add_row(Compare, 'Fe2_max_uM', ...
+    max(Ode.Fe2), max(P.Fe2));
+Compare = add_row(Compare, 'Fe2_bottom_uM', ...
+    Ode.Fe2(end), P.Fe2(end));
+Compare = add_row(Compare, 'HS_max_uM', ...
+    max(Ode.HS), max(P.HS));
+Compare = add_row(Compare, 'CH4_max_uM', ...
+    max(Ode.CH4), max(P.CH4));
+Compare = add_row(Compare, 'CH4_bottom_uM', ...
+    Ode.CH4(end), P.CH4(end));
+Compare = add_row(Compare, 'FeOOH_top_umol_g', ...
+    Ode.FeOOH(1), P.FeOOH(1));
+Compare = add_row(Compare, 'FeOOH_max_umol_g', ...
+    max(Ode.FeOOH), max(P.FeOOH));
+Compare = add_row(Compare, 'FeOOH_bottom_umol_g', ...
+    Ode.FeOOH(end), P.FeOOH(end));
+Compare = add_row(Compare, 'DIC_bottom_uM', ...
+    Ode.DIC(end), P.DIC(end));
+Compare = add_row(Compare, 'ALK_bottom_uM', ...
+    Ode.ALK(end), P.ALK(end));
+Compare = add_row(Compare, 'pH_bottom', ...
+    Ode.pH(end), D.pH(end));
+Compare = add_row(Compare, 'sigma_top5_mean', ...
+    mean(Ode.sigma(Ode.z <= 5)), ...
+    mean(D.sigma_carb(z_pde <= 5)));
+Compare = add_row(Compare, 'sigma_bottom', ...
+    Ode.sigma(end), D.sigma_carb(end));
+Compare = add_row(Compare, 'CaCO3_top_pct', ...
+    100 .* Ode.CaCO3(1), ...
+    100 .* P.CaCO3(1));
+Compare = add_row(Compare, 'CaCO3_bottom_pct', ...
+    100 .* Ode.CaCO3(end), ...
+    100 .* P.CaCO3(end));
+% Optional integrated diagnostics if available.
+if isfield(Ode, 'RC') && isfield(D, 'RC_uM')
+    Compare = add_row(Compare, 'I_RC_umolC_cm2_yr', ...
+        trapz(Ode.z, Ode.RC .* 1e9) .* 1e-3, ...
+        trapz(z_pde,  D.RC_uM(:)) .* 1e-3);
+end
+if isfield(Ode, 'R_SRR') && isfield(D, 'R_SRR')
+    Compare = add_row(Compare, 'I_SRR_umolSO4_cm2_yr', ...
+        trapz(Ode.z, Ode.R_SRR) .* 1e-3, ...
+        trapz(z_pde,  D.R_SRR(:)) .* 1e-3);
+end
+if isfield(Ode, 'Rate_Meth') && isfield(D, 'R_Meth')
+    Compare = add_row(Compare, 'I_Meth_umolCH4_cm2_yr', ...
+        trapz(Ode.z, Ode.Rate_Meth) .* 1e-3, ...
+        trapz(z_pde,  D.R_Meth(:)) .* 1e-3);
+end
+% Redox partition diagnostics.
+if isfield(Ode, 'R_respi') && isfield(D, 'R_respi')
+    Compare = add_row(Compare, 'I_O2_resp_umolC_cm2_yr', ...
+        trapz(Ode.z, Ode.R_respi) .* 1e-3, ...
+        trapz(z_pde,  D.R_respi(:)) .* 1e-3);
+end
+if isfield(Ode, 'R_FeRed') && isfield(D, 'R_FeRed')
+    Compare = add_row(Compare, 'I_FeRed_umolFe_cm2_yr', ...
+        trapz(Ode.z, Ode.R_FeRed) .* 1e-3, ...
+        trapz(z_pde,  D.R_FeRed(:)) .* 1e-3);
+    Compare = add_row(Compare, 'I_FeRed_C_umolC_cm2_yr', ...
+        trapz(Ode.z, Ode.R_FeRed ./ 4) .* 1e-3, ...
+        trapz(z_pde,  D.R_FeRed(:) ./ 4) .* 1e-3);
+end
+if isfield(Ode, 'R_AOM_actual') && isfield(D, 'R_AOM')
+    Compare = add_row(Compare, 'I_AOM_umolSO4_cm2_yr', ...
+        trapz(Ode.z, Ode.R_AOM_actual) .* 1e-3, ...
+        trapz(z_pde,  D.R_AOM(:)) .* 1e-3);
+elseif isfield(Ode, 'R_AOM') && isfield(D, 'R_AOM')
+    Compare = add_row(Compare, 'I_AOM_umolSO4_cm2_yr', ...
+        trapz(Ode.z, Ode.R_AOM) .* 1e-3, ...
+        trapz(z_pde,  D.R_AOM(:)) .* 1e-3);
+end
+if isfield(Ode, 'R_CH4Ox') && isfield(D, 'R_CH4Ox')
+    Compare = add_row(Compare, 'I_CH4Ox_umolCH4_cm2_yr', ...
+        trapz(Ode.z, Ode.R_CH4Ox) .* 1e-3, ...
+        trapz(z_pde,  D.R_CH4Ox(:)) .* 1e-3);
+end
+if isfield(Ode, 'R_FeS') && isfield(D, 'R_FeS')
+    Compare = add_row(Compare, 'I_FeS_umolFe_cm2_yr', ...
+        trapz(Ode.z, Ode.R_FeS) .* 1e-3, ...
+        trapz(z_pde,  D.R_FeS(:)) .* 1e-3);
+end
+if isfield(Ode, 'R_HS_Ox') && isfield(D, 'R_HSOx')
+    Compare = add_row(Compare, 'I_HSOx_umolS_cm2_yr', ...
+        trapz(Ode.z, Ode.R_HS_Ox) .* 1e-3, ...
+        trapz(z_pde,  D.R_HSOx(:)) .* 1e-3);
+end
+% Derived comparison columns.
+Compare.AbsDiff = Compare.PDE - Compare.ODE;
+Compare.RelDiff_pct = 100 .* Compare.AbsDiff ./ max(abs(Compare.ODE), 1e-12);
+disp(Compare);
+end
+function T = add_row(T, name, ode_val, pde_val)
+newrow = table(string(name), ode_val, pde_val, ...
+    'VariableNames', {'Metric','ODE','PDE'});
+T = [T; newrow];
+end
+function depth = first_depth_below(z, x, threshold, default_depth)
+z = z(:);
+x = x(:);
+idx = find(x < threshold, 1, 'first');
+if isempty(idx)
+    depth = default_depth;
+else
+    depth = z(idx);
+end
+end
+```
+
+## File: RTM_ExportODE.m
+```matlab
+function Ode = RTM_ExportODE()
+% RTM_EXPORTODE
+% Export current ODE workspace variables into a benchmark struct.
+%
+% Run this from the command window after Run_RTM_1D.m finishes:
+%   Ode = RTM_ExportODE();
+required_vars = {'z_sed','Oxygen','Sulfate','C_Fe','C_HS','CH4', ...
+                 'FeooH','C_DIC','ALK','pH','sigma_carb','CaCO3'};
+caller_vars = evalin('base', 'who');
+for i = 1:numel(required_vars)
+    if ~ismember(required_vars{i}, caller_vars)
+        error('Missing variable "%s" in base workspace. Run Run_RTM_1D.m first.', required_vars{i});
+    end
+end
+Ode = struct();
+Ode.z     = evalin('base', 'z_sed(:)');
+Ode.O2    = evalin('base', 'Oxygen(:)');
+Ode.SO4   = evalin('base', 'Sulfate(:)');
+Ode.Fe2   = evalin('base', 'C_Fe(:)');
+Ode.HS    = evalin('base', 'C_HS(:)');
+Ode.CH4   = evalin('base', 'CH4(:)');
+Ode.FeOOH = evalin('base', 'FeooH(:)');
+Ode.DIC   = evalin('base', 'C_DIC(:)');
+Ode.ALK   = evalin('base', 'ALK(:)');
+Ode.pH    = evalin('base', 'pH(:)');
+Ode.sigma = evalin('base', 'sigma_carb(:)');
+Ode.CaCO3 = evalin('base', 'CaCO3(:)');
+optional_vars = {'RC','R_respi','R_SRR','Rate_Meth', ...
+                 'R_FeRed','R_FeS','R_FeOx','R_HS_Ox', ...
+                 'R_AOM','R_AOM_actual','R_CH4Ox'};
+for i = 1:numel(optional_vars)
+    name = optional_vars{i};
+    if ismember(name, caller_vars)
+        Ode.(name) = evalin('base', [name, '(:)']);
+    end
+end
+fprintf('ODE benchmark exported: %d depth nodes.\n', numel(Ode.z));
+end
+```
+
+## File: RTM_PDE_RHS.m
+```matlab
+function dYdt = RTM_PDE_RHS(t, Y, Grid, Forcing, Params, Config)
+% RTM_PDE_RHS
+% Coupled finite-volume method-of-lines RHS for transient 1-D RTM.
+%
+% All dynamic species are advanced together by ode15s.
+% Transport is finite-volume conservative.
+% Reactions are computed by RTM_Reaction_Rates.
+State = Unpack_State(Y, Grid);
+% Safety only for reaction calculation.
+% Formal nonnegativity should be handled by ode15s NonNegative and
+% depletion-aware reaction limiters.
+State = floor_state(State);
+[Rates, ~] = RTM_Reaction_Rates(State, Grid, Forcing, Params, Config);
+dState = struct();
+% ========================================================================
+% Solids: conservative mixing + burial + reaction.
+% Top boundary is depositional flux.
+% ========================================================================
+F_OM_lab_top = Forcing.F_lab_OM;               % g/cm2/yr
+F_OM_ref_top = Forcing.F_ref_OM;               % g/cm2/yr
+F_FeOOH_top  = Forcing.F_FeOx .* 36.5;         % umol/cm2/yr
+F_CaCO3_top  = Forcing.F_CaCO3 .* 1e-4;        % g/cm2/yr
+if isfield(Params, 'Fe_inventory_factor')
+    F_FeOOH_top = Params.Fe_inventory_factor .* F_FeOOH_top;
+end
+dState.OM_lab = solid_rhs(State.OM_lab, Grid, Rates.OM_lab, F_OM_lab_top);
+dState.OM_ref = solid_rhs(State.OM_ref, Grid, Rates.OM_ref, F_OM_ref_top);
+dState.FeOOH  = solid_rhs(State.FeOOH,  Grid, Rates.FeOOH,  F_FeOOH_top);
+dState.CaCO3  = solid_rhs(State.CaCO3,  Grid, Rates.CaCO3,  F_CaCO3_top);
+% ========================================================================
+% Solutes: conservative diffusion/advection + exchange + reaction.
+% Top boundary is fixed concentration through face flux.
+% Bottom boundary is zero diffusive gradient with advective outflow.
+% ========================================================================
+dState.O2 = solute_rhs(State.O2, Grid, Params.DO2, Rates.O2, Forcing.O2_top);
+dState.Fe2 = solute_rhs(State.Fe2, Grid, Params.DH2S, Rates.Fe2, Forcing.Fe_top);
+dState.SO4 = solute_rhs(State.SO4, Grid, Params.DSO4, Rates.SO4, Forcing.SO4_top);
+dState.HS = solute_rhs(State.HS, Grid, Params.DH2S, Rates.HS, Forcing.HS_top);
+dState.CH4 = solute_rhs(State.CH4, Grid, Params.DCH4, Rates.CH4, Forcing.CH4_top);
+dState.DIC = solute_rhs(State.DIC, Grid, Params.DHCO3, Rates.DIC, Forcing.DIC_top);
+dState.ALK = solute_rhs(State.ALK, Grid, Params.DHCO3, Rates.ALK, Forcing.ALK_top);
+dYdt = Pack_State(dState);
+end
+% ========================================================================
+% Local finite-volume helpers.
+% ========================================================================
+function dCdt = solute_rhs(C, Grid, D, R, C_top)
+% d(phi*C)/dt = -div(F) + phi*R + phi*Alpha*(C_top-C)
+C = C(:);
+R = R(:);
+n = Grid.n;
+dz = Grid.dz;
+phi = Grid.poros(:);
+Alpha = Grid.Alpha_exchange(:);
+v = Grid.v_fluid(:);
+F = zeros(n+1,1);  % face flux, positive downward, unit uM*cm/yr
+% Top face: Dirichlet concentration C_top.
+F(1) = -phi(1) .* D .* (C(1) - C_top) ./ (0.5 .* dz) ...
+       + phi(1) .* v(1) .* upwind_top(C(1), C_top, v(1));
+% Internal faces.
+for i = 1:n-1
+    phi_f = 0.5 .* (phi(i) + phi(i+1));
+    v_f   = 0.5 .* (v(i) + v(i+1));
+    if v_f >= 0
+        C_up = C(i);
+    else
+        C_up = C(i+1);
+    end
+    F(i+1) = -phi_f .* D .* (C(i+1) - C(i)) ./ dz ...
+             + phi_f .* v_f .* C_up;
+end
+% Bottom face: zero diffusive gradient, advective outflow if any.
+F(n+1) = phi(end) .* v(end) .* C(end);
+storage_tendency = -(F(2:end) - F(1:end-1)) ./ dz ...
+                   + R ...
+                   + phi .* Alpha .* (C_top - C);
+% d(phi*C)/dt = -div(F) + R_bulk + phi*Alpha*(C_top-C)
+% R is a bulk-volume reaction term, in uM_bulk/yr.
+dCdt = storage_tendency ./ max(phi, 1e-12);
+end
+function dCdt = solid_rhs(C, Grid, R, F_top)
+% d(A*C)/dt = -div(F) + A*R
+% A = rho*(1-phi), C is solid concentration per gDW.
+%
+% F_top is imposed depositional flux at sediment-water interface.
+% Units must match A*v*C:
+%   OM/CaCO3: g/cm2/yr
+%   FeOOH:    umol/cm2/yr
+C = C(:);
+R = R(:);
+n = Grid.n;
+dz = Grid.dz;
+rho = Grid.rho;
+phi = Grid.poros(:);
+A = rho .* max(1 - phi, 1e-6);
+Db = Grid.D_solid_mix(:);
+v = Grid.v_solid(:);
+F = zeros(n+1,1);  % positive downward
+% Top depositional flux.
+F(1) = F_top;
+% Internal faces.
+for i = 1:n-1
+    A_f  = 0.5 .* (A(i) + A(i+1));
+    Db_f = 0.5 .* (Db(i) + Db(i+1));
+    v_f  = 0.5 .* (v(i) + v(i+1));
+    if v_f >= 0
+        C_up = C(i);
+    else
+        C_up = C(i+1);
+    end
+    F(i+1) = -A_f .* Db_f .* (C(i+1) - C(i)) ./ dz ...
+             + A_f .* v_f .* C_up;
+end
+% Bottom face: burial outflow, zero diffusive gradient.
+F(n+1) = A(end) .* v(end) .* C(end);
+storage_tendency = -(F(2:end) - F(1:end-1)) ./ dz + A .* R;
+dCdt = storage_tendency ./ max(A, 1e-12);
+end
+function C_face = upwind_top(C_cell, C_top, v_face)
+if v_face >= 0
+    C_face = C_top;
+else
+    C_face = C_cell;
+end
+end
+function State = floor_state(State)
+names = fieldnames(State);
+for i = 1:numel(names)
+    name = names{i};
+    if strcmp(name, 'DIC') || strcmp(name, 'ALK')
+        State.(name) = max(real(State.(name)), 1e-12);
+    else
+        State.(name) = max(real(State.(name)), 0);
+    end
+end
+end
+```
+
+## File: RTM_Reaction_Rates.m
+```matlab
+function [Rates, Diag] = RTM_Reaction_Rates(State, Grid, Forcing, Params, Config)
+% RTM_REACTION_RATES
+% Coupled reaction-rate calculator for the transient FV-MOL RTM.
+%
+% This file intentionally extracts mechanism logic from the stable ODE model,
+% but does NOT copy bvp4c-specific flux variables or Picard iteration logic.
+%
+% Required State fields, all column vectors with length Grid.n:
+%   Solids:
+%     OM_lab      g/gDW
+%     OM_ref      g/gDW
+%     FeOOH       umol/gDW
+%     CaCO3       g/gDW
+%
+%   Solutes:
+%     O2          uM
+%     Fe2         uM
+%     SO4         uM
+%     HS          uM total sulfide
+%     CH4         uM
+%     DIC         uM
+%     ALK         uM
+%
+% Returned Rates fields have units:
+%   Solids: same concentration unit per yr
+%   Solutes: uM/yr
+%
+% Transport, burial, diffusion, bioirrigation, and boundary conditions
+% should be handled outside this function in RTM_PDE_RHS.m.
+% ---------- vector safety ----------
+z   = Grid.z(:);
+phi = Grid.poros(:);
+ks  = Grid.k_sed(:);
+n   = numel(z);
+OM_lab = col(State.OM_lab, n, 'OM_lab');
+OM_ref = col(State.OM_ref, n, 'OM_ref');
+O2     = max(col(State.O2,    n, 'O2'),    0);
+FeOOH  = max(col(State.FeOOH, n, 'FeOOH'), 0);
+Fe2    = max(col(State.Fe2,   n, 'Fe2'),   0);
+SO4    = max(col(State.SO4,   n, 'SO4'),   0);
+HS     = max(col(State.HS,    n, 'HS'),    0);
+CH4    = max(col(State.CH4,   n, 'CH4'),   0);
+DIC    = max(col(State.DIC,   n, 'DIC'),   1e-12);
+ALK    = max(col(State.ALK,   n, 'ALK'),   1e-12);
+CaCO3  = max(col(State.CaCO3, n, 'CaCO3'), 0);
+% ---------- scalar parameters ----------
+rho = pick_scalar(Params, Config, Forcing, {'rho'}, 2.73);
+k_O2       = pick_scalar(Params, Config, Forcing, {'k_O2'}, 2);
+k_SO4      = pick_scalar(Params, Config, Forcing, {'k_SO4'}, 20);
+KFEMonod   = pick_scalar(Params, Config, Forcing, {'KFEMonod'}, 1000);
+K_HS       = pick_scalar(Params, Config, Forcing, {'K_HS'}, 7);
+kFeOx      = pick_scalar(Params, Config, Forcing, {'kFeOx'}, 10);
+kFeS       = pick_scalar(Params, Config, Forcing, {'kFeS'}, 1);
+Kreox      = pick_scalar(Params, Config, Forcing, {'Kreox'}, 500);
+K_CH4_SO4  = pick_scalar(Params, Config, Forcing, {'K_CH4_SO4'}, 100);
+K_CH4_O2   = pick_scalar(Params, Config, Forcing, {'K_CH4_O2'}, 1);
+k_AOM      = pick_scalar(Params, Config, Forcing, {'k_AOM'}, 0.2);
+k_CH4_O2   = pick_scalar(Params, Config, Forcing, {'k_aerobic_CH4'}, 6);
+Q10        = pick_scalar(Params, Config, Forcing, {'Q10'}, 2);
+T_ref      = pick_scalar(Params, Config, Forcing, {'T_ref'}, 25);
+T          = pick_scalar(Forcing, Config, Params, {'T', 'T_future'}, 25);
+Salinity   = pick_scalar(Forcing, Config, Params, {'Salinity'}, 0.1);
+F_FeOx     = pick_scalar(Forcing, Config, Params, {'F_FeOx'}, 0);
+Ca         = pick_scalar(Forcing, Config, Params, {'Ca_top', 'Calcium'}, 1000);
+k_ref_factor = pick_scalar(Config, Params, Forcing, {'k_ref_factor'}, 0);
+% Carbonate kinetic parameters.
+Ksp_ca     = pick_scalar(Params, Config, Forcing, {'Ksp_ca'}, 4.5e5);
+k_calcite  = pick_scalar(Params, Config, Forcing, {'k_calcite'}, 1);
+k_dis1     = pick_scalar(Params, Config, Forcing, {'k_calcite_dis1'}, 0.005);
+k_dis2     = pick_scalar(Params, Config, Forcing, {'k_calcite_dis2'}, 10);
+n_form     = pick_scalar(Params, Config, Forcing, {'n_power_CaCO31'}, 1.76);
+n_dis1     = pick_scalar(Params, Config, Forcing, {'n_power_CaCO32'}, 0.11);
+n_dis2     = pick_scalar(Params, Config, Forcing, {'n_power_CaCO33'}, 4);
+gamma_Ca   = pick_scalar(Params, Config, Forcing, {'Calcium_activity'}, 0.6);
+gamma_CO3  = pick_scalar(Params, Config, Forcing, {'CO3_activity'}, 0.6);
+% Numerical limiter parameters.
+SO4_cut = pick_scalar(Config, Params, Forcing, {'SO4_cut'}, 1e-6);
+Temp_factor = Q10.^((T - T_ref) ./ 10);
+% ========================================================================
+% 1. Carbonate speciation first, because HS free fraction needs pH.
+% ========================================================================
+Carb = RTM_Carbonate(ALK, DIC, T, Salinity);
+pH  = Carb.pH;
+CO3 = max(Carb.CO3, 1e-12);
+sigma_carb = (gamma_Ca .* Ca .* gamma_CO3 .* CO3) ./ Ksp_ca - 1;
+% ========================================================================
+% 2. OM degradation and residual-carbon cascade.
+% ========================================================================
+% OM_lab is the redox-active pool.
+% Unit follows current ODE convention:
+%   RC_mol = mol C / cm3 bulk sediment / yr
+%   RC_uM  = umol C / L bulk sediment / yr
+RC_mol = Temp_factor .* ks .* OM_lab .* rho .* max(1 - phi, 1e-6) ./ 12;
+RC_uM  = RC_mol .* 1e9;
+% Solid OM reaction terms.
+R_OM_lab = -Temp_factor .* ks .* OM_lab;
+R_OM_ref = -Temp_factor .* k_ref_factor .* ks .* OM_ref;
+% O2 branch.
+R_respi = RC_uM .* O2 ./ max(O2 + k_O2, 1e-12);
+R_respi = min(max(R_respi, 0), RC_uM);
+RC_after_O2 = max(RC_uM - R_respi, 0);
+% Fe branch.
+Fe_gate = FeOOH ./ max(FeOOH + KFEMonod, 1e-12);
+C_to_Fe_pot = RC_after_O2 .* Fe_gate;
+R_FeRed_pot = 4 .* C_to_Fe_pot;  % umol Fe / L / yr
+I_FeRed_pot = trapz(z, R_FeRed_pot) .* 1e-3;  % umol Fe / cm2 / yr
+I_Fe_supply_ext = F_FeOx .* 36.5;             % mmol/m2/d -> umol/cm2/yr
+Fe_supply_scale = min(1, I_Fe_supply_ext ./ max(I_FeRed_pot, 1e-12));
+R_FeRed = R_FeRed_pot .* Fe_supply_scale;
+C_to_Fe = R_FeRed ./ 4;
+RC_after_Fe = max(RC_after_O2 - C_to_Fe, 0);
+% SO4 branch with active depletion limiter.
+SO4_pos = max(SO4, 0);
+f_SRR = SO4_pos ./ max(SO4_pos + k_SO4, 1e-12);
+f_SRR(SO4_pos <= SO4_cut) = 0;
+R_SRR_pot = 0.5 .* RC_after_Fe;
+R_SRR = R_SRR_pot .* f_SRR;
+% AOM uses current CH4 and current SO4 in the coupled PDE RHS.
+f_AOM = SO4_pos ./ max(SO4_pos + K_CH4_SO4, 1e-12);
+f_AOM(SO4_pos <= SO4_cut) = 0;
+R_AOM = k_AOM .* CH4 .* f_AOM;
+% Methanogenesis branch.
+RC_after_SO4 = max(RC_after_Fe - 2 .* R_SRR, 0);
+R_Meth = 0.5 .* RC_after_SO4;
+% Aerobic methane oxidation.
+R_CH4Ox = k_CH4_O2 .* CH4 .* O2 ./ max(O2 + K_CH4_O2, 1e-12);
+% ========================================================================
+% 3. Fe/S secondary reactions.
+% ========================================================================
+HS_free = HS ./ (1 + (10.^(6 - pH)) ./ max(K_HS, 1e-12));
+HS_free = max(HS_free, 0);
+R_FeOx = kFeOx .* Fe2 .* O2;
+R_FeS  = kFeS  .* Fe2 .* HS_free;
+R_HSOx = Kreox .* HS_free .* O2;
+% Convert FeOOH bulk-volume reaction rates to solid concentration rates:
+% R_FeRed / R_FeOx: umol/L_bulk/yr
+% FeOOH:            umol/gDW
+% A = rho*(1-phi):  gDW/cm3_bulk
+%
+% umol/L_bulk/yr * 1e-3 = umol/cm3_bulk/yr
+% solid rate = umol/cm3_bulk/yr / A
+bulk_to_solid_Fe = 1e-3 ./ (rho .* max(1 - phi, 1e-6));
+R_FeRed_solid = R_FeRed .* bulk_to_solid_Fe;
+R_FeOx_solid  = R_FeOx  .* bulk_to_solid_Fe;
+% ========================================================================
+% 4. Carbonate precipitation/dissolution.
+% ========================================================================
+solid_to_uM_carb = 1e3 .* 1e6 .* 1e-2 .* rho .* max(1 - phi, 1e-6);
+uM_to_solid_carb = 1 ./ solid_to_uM_carb;
+R_carb_form_solid = zeros(n,1);
+R_carb_dis_solid  = zeros(n,1);
+idx_form = sigma_carb > 0;
+R_carb_form_solid(idx_form) = ...
+    abs(sigma_carb(idx_form)).^n_form .* k_calcite .* uM_to_solid_carb(idx_form);
+idx_dis1 = sigma_carb < 0 & sigma_carb > -0.2;
+R_carb_dis_solid(idx_dis1) = ...
+    abs(sigma_carb(idx_dis1)).^n_dis1 .* k_dis1 .* CaCO3(idx_dis1);
+idx_dis2 = sigma_carb <= -0.2;
+R_carb_dis_solid(idx_dis2) = ...
+    abs(sigma_carb(idx_dis2)).^n_dis2 .* k_dis2 .* CaCO3(idx_dis2);
+% Positive means net CaCO3 precipitation into solid phase.
+R_carb_net_solid = R_carb_form_solid - R_carb_dis_solid;
+R_carb_net_uM    = R_carb_net_solid .* solid_to_uM_carb;
+% ========================================================================
+% 5. Final explicit reaction source/sink terms for PDE RHS.
+% ========================================================================
+Rates = struct();
+% Solids.
+Rates.OM_lab = R_OM_lab;
+Rates.OM_ref = R_OM_ref;
+Rates.FeOOH  = -R_FeRed_solid + R_FeOx_solid;
+Rates.CaCO3  = R_carb_net_solid;
+% Solutes.
+% For first PDE benchmark, O2 follows the current ODE-compatible primary
+% OM respiration sink. Secondary O2 sinks are stored in diagnostics below.
+Rates.O2  = -R_respi;
+Rates.Fe2 = +R_FeRed - R_FeOx - R_FeS;
+% Include sulfide oxidation as sulfate regeneration in the transient sulfur
+% ledger. This is more mass-consistent than the current steady FV SO4 solver.
+Rates.SO4 = -R_SRR - R_AOM + R_HSOx;
+Rates.HS  = +R_SRR + R_AOM - R_FeS - R_HSOx;
+Rates.CH4 = +R_Meth - R_AOM - R_CH4Ox;
+% DIC/ALK ledger follows explicit reaction signs:
+% carbonate precipitation consumes DIC/ALK; dissolution releases them.
+Rates.DIC = +R_respi ...
+            +R_FeRed ./ 4 ...
+            +2 .* R_SRR ...
+            +R_Meth ...
+            +R_CH4Ox ...
+            +R_AOM ...
+            -R_carb_net_uM;
+Rates.ALK = +0.5 .* R_FeRed ...
+            +2 .* R_SRR ...
+            +2 .* R_AOM ...
+            -2 .* R_FeS ...
+            -R_HSOx ...
+            -2 .* R_carb_net_uM;
+% ========================================================================
+% 6. Diagnostics.
+% ========================================================================
+Diag = struct();
+Diag.pH = pH;
+Diag.CO3 = CO3;
+Diag.H2CO3 = Carb.H2CO3;
+Diag.sigma_carb = sigma_carb;
+Diag.RC_mol = RC_mol;
+Diag.RC_uM = RC_uM;
+Diag.R_respi = R_respi;
+Diag.R_FeRed = R_FeRed;
+Diag.R_SRR = R_SRR;
+Diag.R_AOM = R_AOM;
+Diag.R_Meth = R_Meth;
+Diag.R_CH4Ox = R_CH4Ox;
+Diag.R_FeOx = R_FeOx;
+Diag.R_FeS = R_FeS;
+Diag.R_HSOx = R_HSOx;
+Diag.R_carb_form_solid = R_carb_form_solid;
+Diag.R_carb_dis_solid = R_carb_dis_solid;
+Diag.R_carb_net_solid = R_carb_net_solid;
+Diag.R_carb_net_uM = R_carb_net_uM;
+Diag.HS_free = HS_free;
+Diag.f_SRR = f_SRR;
+Diag.f_AOM = f_AOM;
+Diag.R_SRR_pot = R_SRR_pot;
+Diag.R_FeRed_pot = R_FeRed_pot;
+Diag.Fe_supply_scale = Fe_supply_scale;
+Diag.I_FeRed_pot = I_FeRed_pot;
+Diag.I_Fe_supply_ext = I_Fe_supply_ext;
+Diag.O2_secondary_sink = R_FeOx + R_HSOx + R_CH4Ox;
+Diag.I_RC = trapz(z, RC_uM) .* 1e-3;
+Diag.I_respi = trapz(z, R_respi) .* 1e-3;
+Diag.I_FeRed_C = trapz(z, R_FeRed ./ 4) .* 1e-3;
+Diag.I_SRR = trapz(z, R_SRR) .* 1e-3;
+Diag.I_AOM = trapz(z, R_AOM) .* 1e-3;
+Diag.I_Meth = trapz(z, R_Meth) .* 1e-3;
+Diag.I_CaCO3_net = trapz(z, R_carb_net_uM) .* 1e-3;
+end
+% ========================================================================
+% Local helpers.
+% ========================================================================
+function v = col(x, n, name)
+    v = x(:);
+    if numel(v) ~= n
+        error('State.%s must have length %d, but got length %d.', name, n, numel(v));
+    end
+    v = real(v);
+end
+function val = pick_scalar(S1, S2, S3, names, default_val)
+    val = default_val;
+    structs = {S1, S2, S3};
+    for is = 1:numel(structs)
+        S = structs{is};
+        if isempty(S) || ~isstruct(S)
+            continue
+        end
+        for iname = 1:numel(names)
+            nm = names{iname};
+            if isfield(S, nm) && ~isempty(S.(nm))
+                candidate = S.(nm);
+                if isscalar(candidate)
+                    val = candidate;
+                    return
+                end
+            end
+        end
+    end
+end
+```
+
 ## File: Run_RTM_1D.m
 ```matlab
 clear all
+tic
 % ----------------------------- INPUT PARAMETERS ---------------------------
 global v_burial Mineral_Mass z_sed Oxygen Sulfate Corg_top
 global k_sed k_O2 DSO4 DH2S DO2 DPO4 k_SO4 Kreox  Bioturb Calcium DHCO3 HCO3init
@@ -1762,6 +2819,73 @@ toc
 % AAA_Store = [NPP.*BE R_ALK_integ_WITH(end) R_ALK_integ_WITHOUT(end) 2.*R_carb_integ(end) F_diff];
 ```
 
+## File: Run_RTM_1D_PDE.m
+```matlab
+function Result = Run_RTM_1D_PDE()
+% RUN_RTM_1D_PDE
+% First coupled FV-MOL transient RTM driver.
+%
+% Purpose:
+%   1. Run constant-forcing spin-up.
+%   2. Test coupled RHS stability.
+%   3. Generate profiles comparable to the stable ODE steady-state model.
+clearvars -except Result
+tic
+Params = Params_Static();
+Config = Config_Baseline();
+% First PDE benchmark settings.
+if ~isfield(Config, 't_spinup')
+    Config.t_spinup = 300;  % yr
+end
+if ~isfield(Config, 'dt_out_spinup')
+    Config.dt_out_spinup = 2;  % yr
+end
+Grid = Build_Grid_1D(Config, Params);
+Forcing = Build_Forcing_PDE(Config);
+State0 = Initialize_PDE_State(Grid, Forcing, Config, Params);
+Y0 = Pack_State(State0);
+tspan = 0:Config.dt_out_spinup:Config.t_spinup;
+nonnegative_idx = 1:numel(Y0);
+opts = odeset( ...
+    'RelTol', 1e-4, ...
+    'AbsTol', 1e-8, ...
+    'NonNegative', nonnegative_idx, ...
+    'MaxStep', 1);
+rhs = @(t,Y) RTM_PDE_RHS(t, Y, Grid, Forcing, Params, Config);
+fprintf('Starting coupled FV-MOL PDE spin-up...\n');
+[tout, Yout] = ode15s(rhs, tspan, Y0, opts);
+fprintf('PDE spin-up finished.\n');
+State_final = Unpack_State(Yout(end,:).', Grid);
+State_final = floor_output_state(State_final);
+[Rates_final, Diag_final] = RTM_Reaction_Rates(State_final, Grid, Forcing, Params, Config);
+Result = struct();
+Result.t = tout;
+Result.Y = Yout;
+Result.Grid = Grid;
+Result.Forcing = Forcing;
+Result.Params = Params;
+Result.Config = Config;
+Result.State_final = State_final;
+Result.Rates_final = Rates_final;
+Result.Diag_final = Diag_final;
+Result.Summary = Summarize_PDE_Result(Result);
+Result.Budget = RTM_Budget(Result);
+% Plot_PDE_Result(Result);
+toc
+end
+function State = floor_output_state(State)
+names = fieldnames(State);
+for i = 1:numel(names)
+    name = names{i};
+    if strcmp(name, 'DIC') || strcmp(name, 'ALK')
+        State.(name) = max(real(State.(name)), 1e-12);
+    else
+        State.(name) = max(real(State.(name)), 0);
+    end
+end
+end
+```
+
 ## File: Sensitivity.m
 ```matlab
 
@@ -2139,6 +3263,136 @@ SO4_diag.I_AOM = trapz(z_sed, R_AOM_actual) .* 1e-3;
 SO4_diag.I_demand_pot = trapz(z_sed, R_SRR_pot(:).') .* 1e-3;
 SO4_diag.I_irrig_source = trapz(z_sed, Alpha_Bioirrig .* (SO4init - Sulfate)) .* 1e-3;
 SO4_diag.J_top_down = -DSO4 .* poros(1) .* ((Sulfate(2) - Sulfate(1)) ./ dz) .* 1e-3;
+end
+```
+
+## File: Summarize_PDE_Result.m
+```matlab
+function Summary = Summarize_PDE_Result(Result)
+% SUMMARIZE_PDE_RESULT
+% Print compact quantitative diagnostics for the FV-MOL PDE result.
+Grid = Result.Grid;
+S = Result.State_final;
+D = Result.Diag_final;
+z = Grid.z(:);
+Summary = struct();
+Summary.OPD = first_depth_below(z, S.O2, 1, z(end));
+Summary.SO4_Depth_10 = first_depth_below(z, S.SO4, 10, z(end));
+Summary.SO4_Depth_1  = first_depth_below(z, S.SO4, 1, z(end));
+Summary.OM_top_pct = 100 .* (S.OM_lab(1) + S.OM_ref(1));
+Summary.OM_bottom_pct = 100 .* (S.OM_lab(end) + S.OM_ref(end));
+Summary.O2_bottom = S.O2(end);
+Summary.SO4_bottom = S.SO4(end);
+Summary.Fe2_max = max(S.Fe2);
+Summary.Fe2_bottom = S.Fe2(end);
+Summary.HS_max = max(S.HS);
+Summary.CH4_max = max(S.CH4);
+Summary.CH4_bottom = S.CH4(end);
+Summary.FeOOH_top = S.FeOOH(1);
+Summary.FeOOH_max = max(S.FeOOH);
+Summary.FeOOH_bottom = S.FeOOH(end);
+Summary.DIC_bottom = S.DIC(end);
+Summary.ALK_bottom = S.ALK(end);
+Summary.pH_bottom = D.pH(end);
+Summary.sigma_top5 = mean(D.sigma_carb(z <= 5));
+Summary.sigma_bottom = D.sigma_carb(end);
+Summary.CaCO3_top_pct = 100 .* S.CaCO3(1);
+Summary.CaCO3_bottom_pct = 100 .* S.CaCO3(end);
+Summary.CaCO3_net_int = D.I_CaCO3_net;
+Summary.I_RC = D.I_RC;
+Summary.I_respi = D.I_respi;
+Summary.I_FeRed_C = D.I_FeRed_C;
+Summary.I_SRR = D.I_SRR;
+Summary.I_AOM = D.I_AOM;
+Summary.I_Meth = D.I_Meth;
+Summary.redox_closure = ...
+    (D.I_respi + D.I_FeRed_C + 2 .* D.I_SRR + 2 .* D.I_Meth) ./ ...
+    max(D.I_RC, 1e-12);
+Summary.Fe_supply_scale = D.Fe_supply_scale;
+Summary.I_FeRed_pot = D.I_FeRed_pot;
+Summary.I_Fe_supply_ext = D.I_Fe_supply_ext;
+Summary.last_step_change = NaN;
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    S_now  = S;
+    names = {'O2','Fe2','SO4','HS','CH4','DIC','ALK','FeOOH','CaCO3'};
+    changes = zeros(numel(names),1);
+    for i = 1:numel(names)
+        name = names{i};
+        a = S_now.(name)(:);
+        b = S_prev.(name)(:);
+        changes(i) = max(abs(a - b)) ./ max(max(abs(b)), 1);
+    end
+    Summary.last_step_change = max(changes);
+    Summary.last_step_change_by_species = array2table(changes(:).', ...
+        'VariableNames', names);
+end
+fprintf('\n================ PDE Summary ================\n');
+fprintf('OPD <1 uM:                 %.2f cm\n', Summary.OPD);
+fprintf('SO4 <10 uM depth:          %.2f cm\n', Summary.SO4_Depth_10);
+fprintf('SO4 bottom:                %.2f uM\n', Summary.SO4_bottom);
+fprintf('\nOM top / bottom:            %.3f / %.3f %%gDW\n', ...
+    Summary.OM_top_pct, Summary.OM_bottom_pct);
+fprintf('\nFe2 max / bottom:           %.2f / %.2f uM\n', ...
+    Summary.Fe2_max, Summary.Fe2_bottom);
+fprintf('FeOOH top / max / bottom:   %.2f / %.2f / %.2f umol/g\n', ...
+    Summary.FeOOH_top, Summary.FeOOH_max, Summary.FeOOH_bottom);
+fprintf('Fe supply scale:            %.3f\n', Summary.Fe_supply_scale);
+fprintf('\nHS max:                     %.2f uM\n', Summary.HS_max);
+fprintf('CH4 max / bottom:           %.2f / %.2f uM\n', ...
+    Summary.CH4_max, Summary.CH4_bottom);
+fprintf('\nDIC bottom:                 %.2f uM\n', Summary.DIC_bottom);
+fprintf('ALK bottom:                 %.2f uM\n', Summary.ALK_bottom);
+fprintf('pH bottom:                  %.3f\n', Summary.pH_bottom);
+fprintf('Mean sigma top 5 cm:        %.4f\n', Summary.sigma_top5);
+fprintf('CaCO3 top / bottom:         %.4f / %.4f %%gDW\n', ...
+    Summary.CaCO3_top_pct, Summary.CaCO3_bottom_pct);
+fprintf('\nIntegrated RC:              %.3f umol C/cm2/yr\n', Summary.I_RC);
+fprintf('Integrated O2 resp:         %.3f\n', Summary.I_respi);
+fprintf('Integrated Fe reduction C:  %.3f\n', Summary.I_FeRed_C);
+fprintf('Integrated SRR:             %.3f umol SO4/cm2/yr\n', Summary.I_SRR);
+fprintf('Integrated AOM:             %.3f umol SO4/cm2/yr\n', Summary.I_AOM);
+fprintf('Integrated methanogenesis:  %.3f umol CH4/cm2/yr\n', Summary.I_Meth);
+fprintf('Redox closure diagnostic:   %.3f\n', Summary.redox_closure);
+if ~isnan(Summary.last_step_change)
+    fprintf('\nMax relative change last output step: %.3e\n', Summary.last_step_change);
+    disp(Summary.last_step_change_by_species);
+end
+fprintf('=============================================\n\n');
+end
+function depth = first_depth_below(z, x, threshold, default_depth)
+idx = find(x(:) < threshold, 1, 'first');
+if isempty(idx)
+    depth = default_depth;
+else
+    depth = z(idx);
+end
+end
+```
+
+## File: Unpack_State.m
+```matlab
+function State = Unpack_State(Y, Grid)
+% UNPACK_STATE
+% Convert ode15s vector back to state struct.
+n = Grid.n;
+Y = Y(:);
+expected_len = 11 * n;
+if numel(Y) ~= expected_len
+    error('State vector length mismatch. Expected %d, got %d.', expected_len, numel(Y));
+end
+i1 = 1;
+State.OM_lab = Y(i1:i1+n-1); i1 = i1 + n;
+State.OM_ref = Y(i1:i1+n-1); i1 = i1 + n;
+State.FeOOH  = Y(i1:i1+n-1); i1 = i1 + n;
+State.CaCO3  = Y(i1:i1+n-1); i1 = i1 + n;
+State.O2  = Y(i1:i1+n-1); i1 = i1 + n;
+State.Fe2 = Y(i1:i1+n-1); i1 = i1 + n;
+State.SO4 = Y(i1:i1+n-1); i1 = i1 + n;
+State.HS  = Y(i1:i1+n-1); i1 = i1 + n;
+State.CH4 = Y(i1:i1+n-1); i1 = i1 + n;
+State.DIC = Y(i1:i1+n-1); i1 = i1 + n;
+State.ALK = Y(i1:i1+n-1);
 end
 ```
 

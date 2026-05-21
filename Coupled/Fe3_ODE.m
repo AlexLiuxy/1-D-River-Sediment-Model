@@ -19,21 +19,22 @@
 %          0];
 
 function dydx = Fe3_ODE(x,Fe3)
-global z_sed Bioturb RC
-global rho Oxygen KFEMonod k_O2 v_burial C_Fe kFeOx poros
 
-RC_1       = interp1(z_sed,RC,x);
-poros_1    = interp1(z_sed,poros,x);
-O2         = interp1(z_sed,Oxygen,x);
-C_Fe_1     = interp1(z_sed,C_Fe,x);
-Inh        = (k_O2./(O2+k_O2));
-Db         = interp1(z_sed,Bioturb,x);
-v_burial_1 = interp1(z_sed,v_burial,x);
+global z_sed Bioturb R_FeRed
+global rho Oxygen v_burial C_Fe kFeOx poros
 
-sigh = 1 - poros_1;
+R_FeRed_1  = interp1(z_sed, R_FeRed, x, 'linear', 'extrap');   % umol/L/yr
+poros_1    = interp1(z_sed, poros, x, 'linear', 'extrap');
+O2         = interp1(z_sed, Oxygen, x, 'linear', 'extrap');
+C_Fe_1     = interp1(z_sed, C_Fe, x, 'linear', 'extrap');
+Db         = max(interp1(z_sed, Bioturb, x, 'linear', 'extrap'), 1e-6);
+v_burial_1 = max(interp1(z_sed, v_burial, x, 'linear', 'extrap'), 1e-6);
+sigh       = max(1 - poros_1, 1e-6);
 
-NR = - 4.*RC_1.*Inh.*1E9.*(Fe3(1)./(Fe3(1)+KFEMonod)).*(poros_1./(1-poros_1)).*1E-3.*(1./rho) ...
-     + (kFeOx.*C_Fe_1.*O2).*(poros_1./(1-poros_1)).*1E-3.*(1./rho);   % umol/g/yr
+R_FeRed_solid = R_FeRed_1 .* (poros_1 ./ max(1 - poros_1, 1e-6)) .* 1e-3 ./ rho;
+R_FeOx_solid  = (kFeOx .* C_Fe_1 .* O2) .* (poros_1 ./ max(1 - poros_1, 1e-6)) .* 1e-3 ./ rho;
+
+NR = - R_FeRed_solid + R_FeOx_solid;   % umol/g/yr
 
 dFe3dx = Fe3(2) ./ (sigh .* Db);
 

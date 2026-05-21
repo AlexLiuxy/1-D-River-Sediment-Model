@@ -13,3 +13,8 @@ res = [ BC_1
         C_orgb(2)];
 
 end
+% function res = organicbc_1(C_orga,C_orgb)
+% global Corg_top
+% res = [ C_orga(1) - Corg_top     % top: fixed solid-phase OM concentration
+%         C_orgb(2) ];             % bottom: zero gradient / zero diffusive flux
+% end

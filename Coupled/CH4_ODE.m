@@ -9,11 +9,21 @@ v_burial_f = interp1(z_sed,v_burial_Fluid,x);
 Alpha_Bioirrig_1 = interp1(z_sed,Alpha_Bioirrig,x);
 fi = interp1(z_sed,poros,x);
 O2 = interp1(z_sed,Oxygen,x);
-SO4 = interp1(z_sed,Sulfate,x);
+% SO4 = interp1(z_sed,Sulfate,x);
+
+SO4_raw = interp1(z_sed, Sulfate, x, 'linear', 'extrap');
+SO4_pos = max(real(SO4_raw), 0);
+
+if SO4_pos <= 1e-6
+    f_AOM_SO4 = 0;
+else
+    f_AOM_SO4 = SO4_pos ./ max(SO4_pos + K_CH4_SO4, 1e-12);
+end
+
 % Inh = (k_O2./(O2+k_O2));
 % Inh1 = (k_SO4./(SO4+k_SO4));
 
-RC1 = interp1(z_sed,RC,x);
+% RC1 = interp1(z_sed,RC,x);
 
 R_Meth_current = double(interp1(z_sed, Rate_Meth, x));
 
@@ -21,7 +31,9 @@ R_Meth_current = double(interp1(z_sed, Rate_Meth, x));
 %       + k_AOM.* CH4(1).* (SO4./(SO4+K_CH4_SO4)) + k_aerobic_CH4.* CH4(1).* (O2./(O2+K_CH4_O2)); % umol/l/year
 
 NR = + v_burial_f.* (CH4(2)/(fi*DCH4)) - R_Meth_current - (Alpha_Bioirrig_1.*(CH4init-CH4(1)))...
-      + k_AOM.* CH4(1).* (SO4./(SO4+K_CH4_SO4)) + k_aerobic_CH4.* CH4(1).* (O2./(O2+K_CH4_O2)); % umol/l/year
+    + k_AOM .* CH4(1) .* f_AOM_SO4 ...%       + k_AOM.* CH4(1).* (SO4./(SO4+K_CH4_SO4))...
+    + k_aerobic_CH4.* CH4(1).* (O2./(O2+K_CH4_O2)); % umol/l/year
+
 dydx = [ CH4(2) /fi/DCH4
            NR];
 

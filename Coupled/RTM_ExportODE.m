@@ -30,6 +30,32 @@ Ode.ALK   = evalin('base', 'ALK(:)');
 Ode.pH    = evalin('base', 'pH(:)');
 Ode.sigma = evalin('base', 'sigma_carb(:)');
 Ode.CaCO3 = evalin('base', 'CaCO3(:)');
+if ismember('C_organic_total', caller_vars)
+    Corg_total = evalin('base', 'C_organic_total(:)');
+elseif ismember('C_organic', caller_vars)
+    Corg_total = evalin('base', 'C_organic(:)');
+else
+    Corg_total = NaN(size(Ode.z));
+end
+
+if ismember('C_organic_lab', caller_vars)
+    Corg_lab = evalin('base', 'C_organic_lab(:)');
+else
+    Corg_lab = NaN(size(Ode.z));
+end
+
+if ismember('C_organic_ref', caller_vars)
+    Corg_ref = evalin('base', 'C_organic_ref(:)');
+else
+    Corg_ref = NaN(size(Ode.z));
+end
+
+Ode.OM_total = Corg_total;
+Ode.OM_lab = Corg_lab;
+Ode.OM_ref = Corg_ref;
+
+Ode.OM_total_top = Corg_total(1);
+Ode.OM_total_bottom = Corg_total(end);
 
 optional_vars = {'RC','R_respi','R_SRR','Rate_Meth', ...
                  'R_FeRed','R_FeS','R_FeOx','R_HS_Ox', ...
