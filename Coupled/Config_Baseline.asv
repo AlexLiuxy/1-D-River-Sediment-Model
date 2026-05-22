@@ -75,23 +75,17 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % safety cap for weak-coupling injection
     Config.max_diffusion_multiplier = 2.0;
     
-    % ---------------- Transient PDE settings ----------------
-    Config.PDE_do_spinup = true;
-    Config.t_spinup = 300;             % yr, constant-forcing spin-up
-    Config.t_final  = 3;               % yr, transient experiment length after spin-up
-    Config.dt_out_spinup = 2;          % yr, saved output interval
-    Config.dt_out_event  = 1/365;      % yr, daily output
-    Config.n_pde = Config.n;
+    Config.use_secondary_O2_sinks = true;   % PDE mechanism test: FeOx, HSOx, CH4Ox consume O2
     
-    % ---------------- PDE mechanism switches ----------------
-    % Keep switches only for mechanisms that are not yet part of the accepted baseline.
-    % Complete O2 ledger is now part of the PDE baseline and has no switch.
-    Config.use_CH4_bubbling = true;   % next-stage mechanism test, default off
-
-    % Simple CH4 ebullition parameters.
-    % CH4 threshold is computed from solubility, pressure, and effective bubble CH4 fraction.
-    Config.k_bubble = 5;               % 1/yr, release rate above threshold
-    Config.bubble_CH4_fraction = 0.35; % effective CH4 mole fraction in bubbles
-    Config.bubble_radius_m = 1e-3;     % m, representative bubble radius
-    Config.water_depth_m = 0;          % m, overlying water depth; site forcing later
+    % ---------------- Transient PDE settings ----------------
+    Config.PDE_use_steady_IC = true;   % development mode only
+    Config.PDE_do_spinup     = true;   % formal transient runs should spin up
+    
+    Config.t_spinup = 300;             % yr, first candidate
+    Config.t_final  = 3;               % yr, transient experiment length after spin-up
+    
+    Config.dt_out_spinup = 2;          % yr
+    Config.dt_out_event  = 1/365;      % yr, daily output
+    
+    Config.n_pde = Config.n;
 end

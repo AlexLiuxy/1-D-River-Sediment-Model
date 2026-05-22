@@ -180,13 +180,23 @@ Budget.OM.ResidualRef = Budget.OM.TopRef ...
 % Fe cap diagnostics
 % =========================
 
+if isfield(D, 'Fe_supply_scale')
+    Budget.FeCap.Scale = D.Fe_supply_scale;
+else
+    Budget.FeCap.Scale = NaN;
+end
 
-Budget.FeCap.Scale = D.Fe_supply_scale;
+if isfield(D, 'I_FeRed_pot')
+    Budget.FeCap.I_FeRed_pot = D.I_FeRed_pot;
+else
+    Budget.FeCap.I_FeRed_pot = NaN;
+end
 
-Budget.FeCap.I_FeRed_pot = D.I_FeRed_pot;
-
-Budget.FeCap.I_Fe_supply_ext = D.I_Fe_supply_ext;
-
+if isfield(D, 'I_Fe_supply_ext')
+    Budget.FeCap.I_Fe_supply_ext = D.I_Fe_supply_ext;
+else
+    Budget.FeCap.I_Fe_supply_ext = NaN;
+end
 
 % =========================
 % Redox partition diagnostics

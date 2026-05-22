@@ -63,7 +63,8 @@ K_CH4_O2   = pick_scalar(Params, Config, Forcing, {'K_CH4_O2'}, 1);
 k_AOM      = pick_scalar(Params, Config, Forcing, {'k_AOM'}, 0.2);
 k_CH4_O2   = pick_scalar(Params, Config, Forcing, {'k_aerobic_CH4'}, 6);
 use_CH4_bubbling = pick_scalar(Config, Params, Forcing, {'use_CH4_bubbling'}, false);
-
+CH4_bubble_threshold = pick_scalar(Config, Params, Forcing, {'CH4_bubble_threshold'}, 500);
+k_bubble = pick_scalar(Config, Params, Forcing, {'k_bubble'}, 5);
 
 Q10        = pick_scalar(Params, Config, Forcing, {'Q10'}, 2);
 T_ref      = pick_scalar(Params, Config, Forcing, {'T_ref'}, 25);
@@ -159,8 +160,13 @@ R_Meth = 0.5 .* RC_after_SO4;
 R_CH4Ox = k_CH4_O2 .* CH4 .* O2 ./ max(O2 + K_CH4_O2, 1e-12);
 
 % Methane ebullition / bubbling loss.
-% No gas-phase storage is tracked in this first implementation.
-[R_Bubble, Bubble] = RTM_Bubbling(CH4, z, T, Config);
+% First implementation: dissolved CH4 above a threshold is removed from
+% porewater and counted as gas loss. No gas-phase storage is tracked yet.
+if use_CH4_bubbling
+    R_Bubble = k_bubble .* max(CH4 - CH4_bubble_threshold, 0);
+else
+    R_Bubble = zeros(n,1);
+end
 
 % ========================================================================
 % 3. Fe/S secondary reactions.
@@ -246,7 +252,7 @@ Rates.SO4 = -R_SRR - R_AOM + R_HSOx;
 
 Rates.HS  = +R_SRR + R_AOM - R_FeS - R_HSOx;
 
-Rates.CH4 = +R_Meth - R_AOM - R_CH4Ox - R_Bubble;
+Rates.CH4 = +R_Meth - R_AOM - R_CH4Ox;
 
 % DIC/ALK ledger follows explicit reaction signs:
 % carbonate precipitation consumes DIC/ALK; dissolution releases them.
@@ -284,14 +290,6 @@ Diag.R_SRR = R_SRR;
 Diag.R_AOM = R_AOM;
 Diag.R_Meth = R_Meth;
 Diag.R_CH4Ox = R_CH4Ox;
-Diag.R_Bubble = R_Bubble;
-Diag.CH4_bubble_threshold = Bubble.CH4_threshold;
-Diag.CH4_bubble_threshold_top = Bubble.CH4_threshold(1);
-Diag.CH4_bubble_threshold_bottom = Bubble.CH4_threshold(end);
-Diag.P_bubble_total_atm = Bubble.P_total_atm;
-Diag.use_CH4_bubbling = Bubble.use_CH4_bubbling;
-Diag.k_bubble = Bubble.k_bubble;
-Diag.bubble_CH4_fraction = Bubble.bubble_CH4_fraction;
 Diag.R_FeOx = R_FeOx;
 Diag.R_FeS = R_FeS;
 Diag.R_HSOx = R_HSOx;
@@ -311,6 +309,7 @@ Diag.I_FeRed_pot = I_FeRed_pot;
 Diag.I_Fe_supply_ext = I_Fe_supply_ext;
 
 Diag.O2_secondary_sink = O2_secondary_sink;
+Diag.use_secondary_O2_sinks = use_secondary_O2_sinks;
 
 Diag.I_RC = trapz(z, RC_uM) .* 1e-3;
 Diag.I_respi = trapz(z, R_respi) .* 1e-3;
@@ -318,8 +317,6 @@ Diag.I_FeRed_C = trapz(z, R_FeRed ./ 4) .* 1e-3;
 Diag.I_SRR = trapz(z, R_SRR) .* 1e-3;
 Diag.I_AOM = trapz(z, R_AOM) .* 1e-3;
 Diag.I_Meth = trapz(z, R_Meth) .* 1e-3;
-dz = mean(diff(z));
-Diag.I_Bubble = sum(R_Bubble(:)) .* dz .* 1e-3;
 Diag.I_CaCO3_net = trapz(z, R_carb_net_uM) .* 1e-3;
 
 end

@@ -24,6 +24,13 @@ Summary.Fe2_bottom = S.Fe2(end);
 Summary.HS_max = max(S.HS);
 Summary.CH4_max = max(S.CH4);
 Summary.CH4_bottom = S.CH4(end);
+if isfield(D, 'CH4_bubble_threshold_top')
+    Summary.CH4_bubble_threshold_top = D.CH4_bubble_threshold_top;
+    Summary.CH4_bubble_threshold_bottom = D.CH4_bubble_threshold_bottom;
+else
+    Summary.CH4_bubble_threshold_top = NaN;
+    Summary.CH4_bubble_threshold_bottom = NaN;
+end
 
 Summary.FeOOH_top = S.FeOOH(1);
 Summary.FeOOH_max = max(S.FeOOH);
@@ -45,6 +52,11 @@ Summary.I_FeRed_C = D.I_FeRed_C;
 Summary.I_SRR = D.I_SRR;
 Summary.I_AOM = D.I_AOM;
 Summary.I_Meth = D.I_Meth;
+if isfield(D, 'I_Bubble')
+    Summary.I_Bubble = D.I_Bubble;
+else
+    Summary.I_Bubble = 0;
+end
 
 Summary.redox_closure = ...
     (D.I_respi + D.I_FeRed_C + 2 .* D.I_SRR + 2 .* D.I_Meth) ./ ...
@@ -92,6 +104,8 @@ fprintf('Fe supply scale:            %.3f\n', Summary.Fe_supply_scale);
 fprintf('\nHS max:                     %.2f uM\n', Summary.HS_max);
 fprintf('CH4 max / bottom:           %.2f / %.2f uM\n', ...
     Summary.CH4_max, Summary.CH4_bottom);
+fprintf('CH4 bubble threshold top/bottom: %.2f / %.2f uM\n', ...
+    Summary.CH4_bubble_threshold_top, Summary.CH4_bubble_threshold_bottom);
 
 fprintf('\nDIC bottom:                 %.2f uM\n', Summary.DIC_bottom);
 fprintf('ALK bottom:                 %.2f uM\n', Summary.ALK_bottom);
@@ -106,6 +120,7 @@ fprintf('Integrated Fe reduction C:  %.3f\n', Summary.I_FeRed_C);
 fprintf('Integrated SRR:             %.3f umol SO4/cm2/yr\n', Summary.I_SRR);
 fprintf('Integrated AOM:             %.3f umol SO4/cm2/yr\n', Summary.I_AOM);
 fprintf('Integrated methanogenesis:  %.3f umol CH4/cm2/yr\n', Summary.I_Meth);
+fprintf('Integrated bubbling loss:   %.3f umol CH4/cm2/yr\n', Summary.I_Bubble);
 fprintf('Redox closure diagnostic:   %.3f\n', Summary.redox_closure);
 
 if ~isnan(Summary.last_step_change)

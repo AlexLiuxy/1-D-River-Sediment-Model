@@ -12,6 +12,7 @@ function Params = Params_Static()
     Params.DH2S = 300;           % cm2 / yr
     Params.DO2  = 300;           % cm2 / yr
     Params.DHCO3 = 400;          % cm2 / yr
+    Params.DCa = Params.DHCO3;   % Ca2+ diffusion coefficient, cm2/yr
     Params.DPO4  = 400;          % cm2 / yr
 
     Params.Kreox = 500;          % 1 / umol / L / yr
