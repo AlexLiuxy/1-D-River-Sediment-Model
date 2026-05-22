@@ -14,5 +14,6 @@ Y = [
     State.CH4(:)
     State.DIC(:)
     State.ALK(:)
+    State.Ca(:)
 ];
 end

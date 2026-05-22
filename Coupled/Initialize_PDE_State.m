@@ -44,4 +44,5 @@ State.HS  = zeros(n,1);
 State.CH4 = max(Forcing.CH4_top .* ones(n,1), 0);
 State.DIC = max(Forcing.DIC_top .* ones(n,1), 1e-12);
 State.ALK = max(Forcing.ALK_top .* ones(n,1), 1e-12);
+State.Ca  = max(Forcing.Ca_top  .* ones(n,1), 1e-12);
 end

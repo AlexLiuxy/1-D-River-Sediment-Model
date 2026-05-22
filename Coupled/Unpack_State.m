@@ -5,7 +5,7 @@ function State = Unpack_State(Y, Grid)
 n = Grid.n;
 Y = Y(:);
 
-expected_len = 11 * n;
+expected_len = 12 * n;
 if numel(Y) ~= expected_len
     error('State vector length mismatch. Expected %d, got %d.', expected_len, numel(Y));
 end
@@ -23,5 +23,6 @@ State.SO4 = Y(i1:i1+n-1); i1 = i1 + n;
 State.HS  = Y(i1:i1+n-1); i1 = i1 + n;
 State.CH4 = Y(i1:i1+n-1); i1 = i1 + n;
 State.DIC = Y(i1:i1+n-1); i1 = i1 + n;
-State.ALK = Y(i1:i1+n-1);
+State.ALK = Y(i1:i1+n-1); i1 = i1 + n;
+State.Ca  = Y(i1:i1+n-1);
 end

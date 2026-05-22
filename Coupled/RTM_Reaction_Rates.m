@@ -20,6 +20,7 @@ function [Rates, Diag] = RTM_Reaction_Rates(State, Grid, Forcing, Params, Config
 %     CH4         uM
 %     DIC         uM
 %     ALK         uM
+%     Ca          uM
 %
 % Returned Rates fields have units:
 %   Solids: same concentration unit per yr
@@ -44,6 +45,7 @@ HS     = max(col(State.HS,    n, 'HS'),    0);
 CH4    = max(col(State.CH4,   n, 'CH4'),   0);
 DIC    = max(col(State.DIC,   n, 'DIC'),   1e-12);
 ALK    = max(col(State.ALK,   n, 'ALK'),   1e-12);
+Ca     = max(col(State.Ca,    n, 'Ca'),    1e-12);
 CaCO3  = max(col(State.CaCO3, n, 'CaCO3'), 0);
 
 % ---------- scalar parameters ----------
@@ -71,7 +73,6 @@ T          = pick_scalar(Forcing, Config, Params, {'T', 'T_future'}, 25);
 Salinity   = pick_scalar(Forcing, Config, Params, {'Salinity'}, 0.1);
 
 F_FeOx     = pick_scalar(Forcing, Config, Params, {'F_FeOx'}, 0);
-Ca         = pick_scalar(Forcing, Config, Params, {'Ca_top', 'Calcium'}, 1000);
 
 k_ref_factor = pick_scalar(Config, Params, Forcing, {'k_ref_factor'}, 0);
 
@@ -228,6 +229,7 @@ R_carb_net_uM    = R_carb_net_solid .* solid_to_uM_carb;
 Rates = struct();
 
 % Solids.
+
 Rates.OM_lab = R_OM_lab;
 Rates.OM_ref = R_OM_ref;
 Rates.FeOOH  = -R_FeRed_solid + R_FeOx_solid;
@@ -265,6 +267,9 @@ Rates.ALK = +0.5 .* R_FeRed ...
             -R_HSOx ...
             -2 .* R_carb_net_uM;
 
+% Ca is consumed by CaCO3 precipitation and released by dissolution.
+Rates.Ca = -R_carb_net_uM;
+
 % ========================================================================
 % 6. Diagnostics.
 % ========================================================================
@@ -274,6 +279,7 @@ Diag = struct();
 Diag.pH = pH;
 Diag.CO3 = CO3;
 Diag.H2CO3 = Carb.H2CO3;
+Diag.Ca = Ca;
 Diag.sigma_carb = sigma_carb;
 
 Diag.RC_mol = RC_mol;

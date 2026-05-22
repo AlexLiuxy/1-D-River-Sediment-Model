@@ -56,6 +56,8 @@ dState.DIC = solute_rhs(State.DIC, Grid, Params.DHCO3, Rates.DIC, Forcing.DIC_to
 
 dState.ALK = solute_rhs(State.ALK, Grid, Params.DHCO3, Rates.ALK, Forcing.ALK_top);
 
+dState.Ca = solute_rhs(State.Ca, Grid, Params.DCa, Rates.Ca, Forcing.Ca_top);
+
 dYdt = Pack_State(dState);
 end
 
@@ -171,7 +173,7 @@ function State = floor_state(State)
 names = fieldnames(State);
 for i = 1:numel(names)
     name = names{i};
-    if strcmp(name, 'DIC') || strcmp(name, 'ALK')
+    if strcmp(name, 'DIC') || strcmp(name, 'ALK') || strcmp(name, 'Ca')
         State.(name) = max(real(State.(name)), 1e-12);
     else
         State.(name) = max(real(State.(name)), 0);

@@ -62,8 +62,8 @@ title('ALK (\muM)');
 grid on; box on
 
 subplot(m_plot,n_plot,10);
-plot(D.H2CO3, z, 'LineWidth', 2); axis ij
-title('H_2CO_3 (\muM)');
+plot(S.Ca, z, 'LineWidth', 2); axis ij
+title('Ca^{2+} (\muM)');
 grid on; box on
 
 subplot(m_plot,n_plot,11);

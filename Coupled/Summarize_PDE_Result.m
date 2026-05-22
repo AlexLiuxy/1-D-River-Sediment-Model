@@ -38,6 +38,8 @@ Summary.FeOOH_bottom = S.FeOOH(end);
 
 Summary.DIC_bottom = S.DIC(end);
 Summary.ALK_bottom = S.ALK(end);
+Summary.Ca_top = S.Ca(1);
+Summary.Ca_bottom = S.Ca(end);
 Summary.pH_bottom = D.pH(end);
 Summary.sigma_top5 = mean(D.sigma_carb(z <= 5));
 Summary.sigma_bottom = D.sigma_carb(end);
@@ -72,7 +74,7 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     S_now  = S;
 
-    names = {'O2','Fe2','SO4','HS','CH4','DIC','ALK','FeOOH','CaCO3'};
+    names = {'O2','Fe2','SO4','HS','CH4','DIC','ALK','Ca','FeOOH','CaCO3'};
     changes = zeros(numel(names),1);
 
     for i = 1:numel(names)
@@ -109,6 +111,8 @@ fprintf('CH4 bubble threshold top/bottom: %.2f / %.2f uM\n', ...
 
 fprintf('\nDIC bottom:                 %.2f uM\n', Summary.DIC_bottom);
 fprintf('ALK bottom:                 %.2f uM\n', Summary.ALK_bottom);
+fprintf('Ca top / bottom:            %.2f / %.2f uM\n', ...
+    Summary.Ca_top, Summary.Ca_bottom);
 fprintf('pH bottom:                  %.3f\n', Summary.pH_bottom);
 fprintf('Mean sigma top 5 cm:        %.4f\n', Summary.sigma_top5);
 fprintf('CaCO3 top / bottom:         %.4f / %.4f %%gDW\n', ...

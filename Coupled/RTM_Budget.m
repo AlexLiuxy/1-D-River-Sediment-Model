@@ -177,6 +177,45 @@ Budget.OM.ResidualRef = Budget.OM.TopRef ...
                       - nan0(Budget.OM.StorageRef);
 
 % =========================
+% Ca budget
+% =========================
+
+Ca = S.Ca(:);
+
+Budget.Ca.Top = Ca(1);
+Budget.Ca.Bottom = Ca(end);
+Budget.Ca.Min = min(Ca);
+Budget.Ca.Max = max(Ca);
+
+% Boundary fluxes. Positive TopFlux is downward into sediment.
+% Positive BottomFlux is downward out of the model domain.
+Budget.Ca.TopFlux = top_solute_flux(Ca, F.Ca_top, phi, P.DCa, Grid.v_fluid, dz);
+Budget.Ca.BottomFlux = bottom_solute_flux(Ca, phi, Grid.v_fluid);
+
+% Bioirrigation/exchange term. Positive means Ca enters porewater.
+Budget.Ca.I_Irrig = sum(phi .* Grid.Alpha_exchange(:) .* (F.Ca_top - Ca)) ...
+                    .* dz .* 1e-3;
+
+% R_carb_net_uM > 0 means CaCO3 precipitation, consuming Ca.
+% Rates.Ca = -R_carb_net_uM.
+Budget.Ca.I_CaCO3Net = sum(D.R_carb_net_uM(:)) .* dz .* 1e-3;
+Budget.Ca.I_Reaction = -Budget.Ca.I_CaCO3Net;
+
+Budget.Ca.Storage = NaN;
+if isfield(Result, 'Y') && size(Result.Y,1) >= 2
+    S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
+    dt = Result.t(end) - Result.t(end-1);
+    dCadt = (S.Ca(:) - S_prev.Ca(:)) ./ max(dt, 1e-12);
+    Budget.Ca.Storage = sum(phi .* dCadt) .* dz .* 1e-3;
+end
+
+Budget.Ca.Residual = Budget.Ca.TopFlux ...
+                   - Budget.Ca.BottomFlux ...
+                   + Budget.Ca.I_Irrig ...
+                   + Budget.Ca.I_Reaction ...
+                   - nan0(Budget.Ca.Storage);
+
+% =========================
 % Fe cap diagnostics
 % =========================
 
@@ -340,6 +379,16 @@ fprintf('Total O2 sink:         %.3f\n', Budget.O2.I_TotalSink);
 fprintf('Storage:               %.3f\n', Budget.O2.Storage);
 fprintf('Residual:              %.3f\n', Budget.O2.Residual);
 
+fprintf('\n--- Ca budget, umol/cm2/yr ---\n');
+fprintf('Ca top / bottom:      %.2f / %.2f uM\n', Budget.Ca.Top, Budget.Ca.Bottom);
+fprintf('Ca min / max:         %.2f / %.2f uM\n', Budget.Ca.Min, Budget.Ca.Max);
+fprintf('Top flux (+down):     %.3f\n', Budget.Ca.TopFlux);
+fprintf('Bottom flux (+down):  %.3f\n', Budget.Ca.BottomFlux);
+fprintf('Irrigation exchange:  %.3f\n', Budget.Ca.I_Irrig);
+fprintf('CaCO3 net rxn:        %.3f\n', Budget.Ca.I_CaCO3Net);
+fprintf('Ca reaction source:   %.3f\n', Budget.Ca.I_Reaction);
+fprintf('Storage:              %.3f\n', Budget.Ca.Storage);
+fprintf('Residual:             %.3f\n', Budget.Ca.Residual);
 
 fprintf('============================================\n\n');
 
@@ -369,4 +418,14 @@ function x = nan0(x)
 if isnan(x)
     x = 0;
 end
+end
+
+function J_bottom_down = bottom_solute_flux(C, phi, v)
+% Positive downward. Convert to umol/cm2/yr.
+C = C(:);
+phi = phi(:);
+v = v(:);
+
+F_bottom = phi(end) .* v(end) .* C(end);
+J_bottom_down = F_bottom .* 1e-3;
 end

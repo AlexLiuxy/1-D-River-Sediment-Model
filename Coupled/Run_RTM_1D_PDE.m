@@ -62,7 +62,7 @@ Result.Diag_final = Diag_final;
 Result.Summary = Summarize_PDE_Result(Result);
 Result.Budget = RTM_Budget(Result);
 
-% Plot_PDE_Result(Result);
+Plot_PDE_Result(Result);
 
 toc
 end
@@ -71,7 +71,7 @@ function State = floor_output_state(State)
 names = fieldnames(State);
 for i = 1:numel(names)
     name = names{i};
-    if strcmp(name, 'DIC') || strcmp(name, 'ALK')
+    if strcmp(name, 'DIC') || strcmp(name, 'ALK') || strcmp(name, 'Ca')
         State.(name) = max(real(State.(name)), 1e-12);
     else
         State.(name) = max(real(State.(name)), 0);
