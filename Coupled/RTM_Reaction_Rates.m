@@ -31,6 +31,7 @@ function [Rates, Diag] = RTM_Reaction_Rates(State, Grid, Forcing, Params, Config
 
 % ---------- vector safety ----------
 z   = Grid.z(:);
+dz  = Grid.dz;
 phi = Grid.poros(:);
 ks  = Grid.k_sed(:);
 n   = numel(z);
@@ -129,7 +130,7 @@ Fe_gate = FeOOH ./ max(FeOOH + KFEMonod, 1e-12);
 C_to_Fe_pot = RC_after_O2 .* Fe_gate;
 R_FeRed_pot = 4 .* C_to_Fe_pot;  % umol Fe / L / yr
 
-I_FeRed_pot = trapz(z, R_FeRed_pot) .* 1e-3;  % umol Fe / cm2 / yr
+I_FeRed_pot = sum(R_FeRed_pot(:)) .* dz .* 1e-3;  % umol Fe / cm2 / yr
 I_Fe_supply_ext = F_FeOx .* 36.5;             % mmol/m2/d -> umol/cm2/yr
 
 Fe_supply_scale = min(1, I_Fe_supply_ext ./ max(I_FeRed_pot, 1e-12));
@@ -318,15 +319,14 @@ Diag.I_Fe_supply_ext = I_Fe_supply_ext;
 
 Diag.O2_secondary_sink = O2_secondary_sink;
 
-Diag.I_RC = trapz(z, RC_uM) .* 1e-3;
-Diag.I_respi = trapz(z, R_respi) .* 1e-3;
-Diag.I_FeRed_C = trapz(z, R_FeRed ./ 4) .* 1e-3;
-Diag.I_SRR = trapz(z, R_SRR) .* 1e-3;
-Diag.I_AOM = trapz(z, R_AOM) .* 1e-3;
-Diag.I_Meth = trapz(z, R_Meth) .* 1e-3;
-dz = mean(diff(z));
+Diag.I_RC = sum(RC_uM(:)) .* dz .* 1e-3;
+Diag.I_respi = sum(R_respi(:)) .* dz .* 1e-3;
+Diag.I_FeRed_C = sum(R_FeRed(:) ./ 4) .* dz .* 1e-3;
+Diag.I_SRR = sum(R_SRR(:)) .* dz .* 1e-3;
+Diag.I_AOM = sum(R_AOM(:)) .* dz .* 1e-3;
+Diag.I_Meth = sum(R_Meth(:)) .* dz .* 1e-3;
 Diag.I_Bubble = sum(R_Bubble(:)) .* dz .* 1e-3;
-Diag.I_CaCO3_net = trapz(z, R_carb_net_uM) .* 1e-3;
+Diag.I_CaCO3_net = sum(R_carb_net_uM(:)) .* dz .* 1e-3;
 
 end
 

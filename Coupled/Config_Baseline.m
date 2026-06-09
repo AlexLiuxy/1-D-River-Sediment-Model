@@ -1,7 +1,9 @@
 function Config = Config_Baseline()
 % CONFIG_BASELINE
-% Site / scenario specific settings for the OLD sequential core.
-Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
+% Baseline settings for the transient 1-D PDE core.
+    
+    Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
+    
     % ---------------- Domain ----------------
     Config.Lbottom = 30;          % cm
     Config.n = 101;
@@ -86,7 +88,7 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % ---------------- PDE mechanism switches ----------------
     % Keep switches only for mechanisms that are not yet part of the accepted baseline.
     % Complete O2 ledger is now part of the PDE baseline and has no switch.
-    Config.use_CH4_bubbling = true;   % next-stage mechanism test, default off
+    Config.use_CH4_bubbling = true;   % baseline ablation switch
 
     % Simple CH4 ebullition parameters.
     % CH4 threshold is computed from solubility, pressure, and effective bubble CH4 fraction.

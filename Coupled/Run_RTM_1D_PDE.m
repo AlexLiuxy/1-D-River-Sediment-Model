@@ -1,17 +1,18 @@
-function Result = Run_RTM_1D_PDE()
+function Result = Run_RTM_1D_PDE(Config, Params, do_plot)
 % RUN_RTM_1D_PDE
 % First coupled FV-MOL transient RTM driver.
 %
-% Purpose:
-%   1. Run constant-forcing spin-up.
-%   2. Test coupled RHS stability.
-%   3. Generate profiles comparable to the stable ODE steady-state model.
-
-clearvars -except Result
 tic
 
-Params = Params_Static();
-Config = Config_Baseline();
+if nargin < 1 || isempty(Config)
+    Config = Config_Baseline();
+end
+if nargin < 2 || isempty(Params)
+    Params = Params_Static();
+end
+if nargin < 3 || isempty(do_plot)
+    do_plot = true;
+end
 
 % First PDE benchmark settings.
 if ~isfield(Config, 't_spinup')
@@ -61,8 +62,11 @@ Result.Diag_final = Diag_final;
 
 Result.Summary = Summarize_PDE_Result(Result);
 Result.Budget = RTM_Budget(Result);
+% Result.Validation = RTM_Validation_Metrics(Result);
 
-Plot_PDE_Result(Result);
+if do_plot
+    Plot_PDE_Result(Result);
+end
 
 toc
 end

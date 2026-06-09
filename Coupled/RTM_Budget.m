@@ -30,7 +30,7 @@ CH4 = S.CH4(:);
 J_CH4_top_down = top_solute_flux(CH4, F.CH4_top, phi, P.DCH4, Grid.v_fluid, dz);
 J_CH4_top_up = max(0, -J_CH4_top_down);
 
-I_CH4_irrig_sink = trapz(z, phi .* Grid.Alpha_exchange(:) .* max(CH4 - F.CH4_top, 0)) .* 1e-3;
+I_CH4_irrig_sink = int_uM(phi .* Grid.Alpha_exchange(:) .* max(CH4 - F.CH4_top, 0), dz);
 
 Budget.CH4.I_Meth = sum(D.R_Meth(:)) .* dz .* 1e-3;
 Budget.CH4.I_AOM  = sum(D.R_AOM(:)) .* dz .* 1e-3;
@@ -53,7 +53,7 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     dt = Result.t(end) - Result.t(end-1);
     dCH4dt = (S.CH4(:) - S_prev.CH4(:)) ./ max(dt, 1e-12);
-    Budget.CH4.Storage = trapz(z, phi .* dCH4dt) .* 1e-3;
+    Budget.CH4.Storage = int_uM(phi .* dCH4dt, dz);
 end
 
 Budget.CH4.Residual = Budget.CH4.Source - Budget.CH4.Sink - nan0(Budget.CH4.Storage);
@@ -68,11 +68,10 @@ Fe2 = S.Fe2(:);
 J_Fe2_top_down = top_solute_flux(Fe2, F.Fe_top, phi, P.DH2S, Grid.v_fluid, dz);
 J_Fe2_top_up = max(0, -J_Fe2_top_down);
 
-I_Fe2_irrig_sink = trapz(z, phi .* Grid.Alpha_exchange(:) .* max(Fe2 - F.Fe_top, 0)) .* 1e-3;
-
-Budget.Fe2.I_FeRed = trapz(z, D.R_FeRed(:)) .* 1e-3;
-Budget.Fe2.I_FeOx  = trapz(z, D.R_FeOx(:)) .* 1e-3;
-Budget.Fe2.I_FeS   = trapz(z, D.R_FeS(:)) .* 1e-3;
+I_Fe2_irrig_sink = int_uM(phi .* Grid.Alpha_exchange(:) .* max(Fe2 - F.Fe_top, 0), dz);
+Budget.Fe2.I_FeRed = int_uM(D.R_FeRed, dz);
+Budget.Fe2.I_FeOx  = int_uM(D.R_FeOx, dz);
+Budget.Fe2.I_FeS   = int_uM(D.R_FeS, dz);
 
 Budget.Fe2.I_IrrigSink = I_Fe2_irrig_sink;
 Budget.Fe2.J_TopUp = J_Fe2_top_up;
@@ -86,7 +85,7 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     dt = Result.t(end) - Result.t(end-1);
     dFe2dt = (S.Fe2(:) - S_prev.Fe2(:)) ./ max(dt, 1e-12);
-    Budget.Fe2.Storage = trapz(z, phi .* dFe2dt) .* 1e-3;
+    Budget.Fe2.Storage = int_uM(phi .* dFe2dt, dz);
 end
 
 Budget.Fe2.Residual = Budget.Fe2.Source - Budget.Fe2.Sink - nan0(Budget.Fe2.Storage);
@@ -108,15 +107,15 @@ F_FeOOH_bottom = A(end) .* Grid.v_solid(end) .* FeOOH(end);
 % FeOOH reaction terms are equivalent to phi-weighted Fe solute rates.
 Budget.FeOOH.TopInput = F_FeOOH_top;
 Budget.FeOOH.BottomBurial = F_FeOOH_bottom;
-Budget.FeOOH.I_FeRed = trapz(z, D.R_FeRed(:)) .* 1e-3;
-Budget.FeOOH.I_FeOx  = trapz(z, D.R_FeOx(:)) .* 1e-3;
+Budget.FeOOH.I_FeRed = int_uM(D.R_FeRed, dz);
+Budget.FeOOH.I_FeOx  = int_uM(D.R_FeOx, dz);
 
 Budget.FeOOH.Storage = NaN;
 if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     dt = Result.t(end) - Result.t(end-1);
     dFeOOHdt = (S.FeOOH(:) - S_prev.FeOOH(:)) ./ max(dt, 1e-12);
-    Budget.FeOOH.Storage = trapz(z, A .* dFeOOHdt);
+    Budget.FeOOH.Storage = int_solid(A .* dFeOOHdt, dz);
 end
 
 Budget.FeOOH.Net = Budget.FeOOH.TopInput + Budget.FeOOH.I_FeOx ...
@@ -137,8 +136,8 @@ F_OM_lab_bottom = A(end) .* Grid.v_solid(end) .* OM_lab(end);
 F_OM_ref_bottom = A(end) .* Grid.v_solid(end) .* OM_ref(end);
 
 % OM reaction rates are in g/gDW/yr.
-I_OM_lab_reaction = trapz(z, A .* max(-Result.Rates_final.OM_lab(:), 0));
-I_OM_ref_reaction = trapz(z, A .* max(-Result.Rates_final.OM_ref(:), 0));
+I_OM_lab_reaction = int_solid(A .* max(-Result.Rates_final.OM_lab(:), 0), dz);
+I_OM_ref_reaction = int_solid(A .* max(-Result.Rates_final.OM_ref(:), 0), dz);
 
 Budget.OM.TopLab = F_OM_lab_top;
 Budget.OM.TopRef = F_OM_ref_top;
@@ -162,8 +161,8 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     dOMlabdt = (S.OM_lab(:) - S_prev.OM_lab(:)) ./ max(dt, 1e-12);
     dOMrefdt = (S.OM_ref(:) - S_prev.OM_ref(:)) ./ max(dt, 1e-12);
 
-    Budget.OM.StorageLab = trapz(z, A .* dOMlabdt);
-    Budget.OM.StorageRef = trapz(z, A .* dOMrefdt);
+    Budget.OM.StorageLab = int_solid(A .* dOMlabdt, dz);
+    Budget.OM.StorageRef = int_solid(A .* dOMrefdt, dz);
 end
 
 Budget.OM.ResidualLab = Budget.OM.TopLab ...
@@ -394,6 +393,13 @@ fprintf('============================================\n\n');
 
 end
 
+function I = int_uM(x, dz)
+I = sum(x(:)) .* dz .* 1e-3;
+end
+
+function I = int_solid(x, dz)
+I = sum(x(:)) .* dz;
+end
 
 function J_top_down = top_solute_flux(C, C_top, phi, D, v, dz)
 % Positive downward. Convert to umol/cm2/yr.

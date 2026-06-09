@@ -24,13 +24,8 @@ Summary.Fe2_bottom = S.Fe2(end);
 Summary.HS_max = max(S.HS);
 Summary.CH4_max = max(S.CH4);
 Summary.CH4_bottom = S.CH4(end);
-if isfield(D, 'CH4_bubble_threshold_top')
-    Summary.CH4_bubble_threshold_top = D.CH4_bubble_threshold_top;
-    Summary.CH4_bubble_threshold_bottom = D.CH4_bubble_threshold_bottom;
-else
-    Summary.CH4_bubble_threshold_top = NaN;
-    Summary.CH4_bubble_threshold_bottom = NaN;
-end
+Summary.CH4_bubble_threshold_top = D.CH4_bubble_threshold_top;
+Summary.CH4_bubble_threshold_bottom = D.CH4_bubble_threshold_bottom;
 
 Summary.FeOOH_top = S.FeOOH(1);
 Summary.FeOOH_max = max(S.FeOOH);
@@ -54,11 +49,7 @@ Summary.I_FeRed_C = D.I_FeRed_C;
 Summary.I_SRR = D.I_SRR;
 Summary.I_AOM = D.I_AOM;
 Summary.I_Meth = D.I_Meth;
-if isfield(D, 'I_Bubble')
-    Summary.I_Bubble = D.I_Bubble;
-else
-    Summary.I_Bubble = 0;
-end
+Summary.I_Bubble = D.I_Bubble;
 
 Summary.redox_closure = ...
     (D.I_respi + D.I_FeRed_C + 2 .* D.I_SRR + 2 .* D.I_Meth) ./ ...
