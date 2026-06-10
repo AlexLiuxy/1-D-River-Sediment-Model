@@ -25,6 +25,7 @@ Grid.v_fluid = Config.vbottom_fluid .* ...
 
 age = Config.ageinit + cumsum(Grid.dz ./ max(Grid.v_solid, 1e-12));
 Grid.k_sed = 10.^(-0.95 .* log10(age) - 0.81);
+Grid.k_sed = Config.k_sed_scale .* Grid.k_sed;
 
 Grid.rho = Params.rho;
 end
