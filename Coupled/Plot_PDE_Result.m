@@ -102,10 +102,10 @@ plot(D.sigma_carb, z, 'LineWidth', 2); axis ij
 title('\Omega - 1');
 grid on; box on
 
-subplot(m_plot,n_plot,18);
-plot(D.R_carb_net_solid, z, 'LineWidth', 2); axis ij
-title('Net CaCO_3 rxn (g/g/yr)');
-grid on; box on
+% subplot(m_plot,n_plot,18);
+% plot(D.R_carb_net_solid, z, 'LineWidth', 2); axis ij
+% title('Net CaCO_3 rxn (g/g/yr)');
+% grid on; box on
 
 drawnow;
 end

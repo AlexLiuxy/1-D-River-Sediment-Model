@@ -52,6 +52,7 @@ Grid.v_fluid = Config.vbottom_fluid .* ...
     (1 + Config.porosbottom) ./ max(1 + Grid.poros, 1e-6);
 age = Config.ageinit + cumsum(Grid.dz ./ max(Grid.v_solid, 1e-12));
 Grid.k_sed = 10.^(-0.95 .* log10(age) - 0.81);
+Grid.k_sed = Config.k_sed_scale .* Grid.k_sed;
 Grid.rho = Params.rho;
 end
 ```
@@ -103,8 +104,8 @@ end
 ```matlab
 function Config = Config_Baseline()
 % CONFIG_BASELINE
-% Site / scenario specific settings for the OLD sequential core.
-Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
+% Baseline settings for the transient 1-D PDE core.
+    Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % ---------------- Domain ----------------
     Config.Lbottom = 30;          % cm
     Config.n = 101;
@@ -175,7 +176,7 @@ Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
     % ---------------- PDE mechanism switches ----------------
     % Keep switches only for mechanisms that are not yet part of the accepted baseline.
     % Complete O2 ledger is now part of the PDE baseline and has no switch.
-    Config.use_CH4_bubbling = true;   % next-stage mechanism test, default off
+    Config.use_CH4_bubbling = true;   % baseline ablation switch
     % Simple CH4 ebullition parameters.
     % CH4 threshold is computed from solubility, pressure, and effective bubble CH4 fraction.
     Config.k_bubble = 5;               % 1/yr, release rate above threshold
@@ -908,7 +909,7 @@ Budget = struct();
 CH4 = S.CH4(:);
 J_CH4_top_down = top_solute_flux(CH4, F.CH4_top, phi, P.DCH4, Grid.v_fluid, dz);
 J_CH4_top_up = max(0, -J_CH4_top_down);
-I_CH4_irrig_sink = trapz(z, phi .* Grid.Alpha_exchange(:) .* max(CH4 - F.CH4_top, 0)) .* 1e-3;
+I_CH4_irrig_sink = int_uM(phi .* Grid.Alpha_exchange(:) .* max(CH4 - F.CH4_top, 0), dz);
 Budget.CH4.I_Meth = sum(D.R_Meth(:)) .* dz .* 1e-3;
 Budget.CH4.I_AOM  = sum(D.R_AOM(:)) .* dz .* 1e-3;
 Budget.CH4.I_Ox   = sum(D.R_CH4Ox(:)) .* dz .* 1e-3;
@@ -924,7 +925,7 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     dt = Result.t(end) - Result.t(end-1);
     dCH4dt = (S.CH4(:) - S_prev.CH4(:)) ./ max(dt, 1e-12);
-    Budget.CH4.Storage = trapz(z, phi .* dCH4dt) .* 1e-3;
+    Budget.CH4.Storage = int_uM(phi .* dCH4dt, dz);
 end
 Budget.CH4.Residual = Budget.CH4.Source - Budget.CH4.Sink - nan0(Budget.CH4.Storage);
 Budget.CH4.SinkSourceRatio = Budget.CH4.Sink ./ max(Budget.CH4.Source, 1e-12);
@@ -934,10 +935,10 @@ Budget.CH4.SinkSourceRatio = Budget.CH4.Sink ./ max(Budget.CH4.Source, 1e-12);
 Fe2 = S.Fe2(:);
 J_Fe2_top_down = top_solute_flux(Fe2, F.Fe_top, phi, P.DH2S, Grid.v_fluid, dz);
 J_Fe2_top_up = max(0, -J_Fe2_top_down);
-I_Fe2_irrig_sink = trapz(z, phi .* Grid.Alpha_exchange(:) .* max(Fe2 - F.Fe_top, 0)) .* 1e-3;
-Budget.Fe2.I_FeRed = trapz(z, D.R_FeRed(:)) .* 1e-3;
-Budget.Fe2.I_FeOx  = trapz(z, D.R_FeOx(:)) .* 1e-3;
-Budget.Fe2.I_FeS   = trapz(z, D.R_FeS(:)) .* 1e-3;
+I_Fe2_irrig_sink = int_uM(phi .* Grid.Alpha_exchange(:) .* max(Fe2 - F.Fe_top, 0), dz);
+Budget.Fe2.I_FeRed = int_uM(D.R_FeRed, dz);
+Budget.Fe2.I_FeOx  = int_uM(D.R_FeOx, dz);
+Budget.Fe2.I_FeS   = int_uM(D.R_FeS, dz);
 Budget.Fe2.I_IrrigSink = I_Fe2_irrig_sink;
 Budget.Fe2.J_TopUp = J_Fe2_top_up;
 Budget.Fe2.Source = Budget.Fe2.I_FeRed;
@@ -948,7 +949,7 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     dt = Result.t(end) - Result.t(end-1);
     dFe2dt = (S.Fe2(:) - S_prev.Fe2(:)) ./ max(dt, 1e-12);
-    Budget.Fe2.Storage = trapz(z, phi .* dFe2dt) .* 1e-3;
+    Budget.Fe2.Storage = int_uM(phi .* dFe2dt, dz);
 end
 Budget.Fe2.Residual = Budget.Fe2.Source - Budget.Fe2.Sink - nan0(Budget.Fe2.Storage);
 Budget.Fe2.SinkSourceRatio = Budget.Fe2.Sink ./ max(Budget.Fe2.Source, 1e-12);
@@ -964,14 +965,14 @@ F_FeOOH_bottom = A(end) .* Grid.v_solid(end) .* FeOOH(end);
 % FeOOH reaction terms are equivalent to phi-weighted Fe solute rates.
 Budget.FeOOH.TopInput = F_FeOOH_top;
 Budget.FeOOH.BottomBurial = F_FeOOH_bottom;
-Budget.FeOOH.I_FeRed = trapz(z, D.R_FeRed(:)) .* 1e-3;
-Budget.FeOOH.I_FeOx  = trapz(z, D.R_FeOx(:)) .* 1e-3;
+Budget.FeOOH.I_FeRed = int_uM(D.R_FeRed, dz);
+Budget.FeOOH.I_FeOx  = int_uM(D.R_FeOx, dz);
 Budget.FeOOH.Storage = NaN;
 if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     S_prev = Unpack_State(Result.Y(end-1,:).', Grid);
     dt = Result.t(end) - Result.t(end-1);
     dFeOOHdt = (S.FeOOH(:) - S_prev.FeOOH(:)) ./ max(dt, 1e-12);
-    Budget.FeOOH.Storage = trapz(z, A .* dFeOOHdt);
+    Budget.FeOOH.Storage = int_solid(A .* dFeOOHdt, dz);
 end
 Budget.FeOOH.Net = Budget.FeOOH.TopInput + Budget.FeOOH.I_FeOx ...
                    - Budget.FeOOH.I_FeRed - Budget.FeOOH.BottomBurial ...
@@ -986,8 +987,8 @@ F_OM_ref_top = F.F_ref_OM;
 F_OM_lab_bottom = A(end) .* Grid.v_solid(end) .* OM_lab(end);
 F_OM_ref_bottom = A(end) .* Grid.v_solid(end) .* OM_ref(end);
 % OM reaction rates are in g/gDW/yr.
-I_OM_lab_reaction = trapz(z, A .* max(-Result.Rates_final.OM_lab(:), 0));
-I_OM_ref_reaction = trapz(z, A .* max(-Result.Rates_final.OM_ref(:), 0));
+I_OM_lab_reaction = int_solid(A .* max(-Result.Rates_final.OM_lab(:), 0), dz);
+I_OM_ref_reaction = int_solid(A .* max(-Result.Rates_final.OM_ref(:), 0), dz);
 Budget.OM.TopLab = F_OM_lab_top;
 Budget.OM.TopRef = F_OM_ref_top;
 Budget.OM.TopTotal = F_OM_lab_top + F_OM_ref_top;
@@ -1004,8 +1005,8 @@ if isfield(Result, 'Y') && size(Result.Y,1) >= 2
     dt = Result.t(end) - Result.t(end-1);
     dOMlabdt = (S.OM_lab(:) - S_prev.OM_lab(:)) ./ max(dt, 1e-12);
     dOMrefdt = (S.OM_ref(:) - S_prev.OM_ref(:)) ./ max(dt, 1e-12);
-    Budget.OM.StorageLab = trapz(z, A .* dOMlabdt);
-    Budget.OM.StorageRef = trapz(z, A .* dOMrefdt);
+    Budget.OM.StorageLab = int_solid(A .* dOMlabdt, dz);
+    Budget.OM.StorageRef = int_solid(A .* dOMrefdt, dz);
 end
 Budget.OM.ResidualLab = Budget.OM.TopLab ...
                       - Budget.OM.BottomLab ...
@@ -1184,6 +1185,12 @@ fprintf('Ca reaction source:   %.3f\n', Budget.Ca.I_Reaction);
 fprintf('Storage:              %.3f\n', Budget.Ca.Storage);
 fprintf('Residual:             %.3f\n', Budget.Ca.Residual);
 fprintf('============================================\n\n');
+end
+function I = int_uM(x, dz)
+I = sum(x(:)) .* dz .* 1e-3;
+end
+function I = int_solid(x, dz)
+I = sum(x(:)) .* dz;
 end
 function J_top_down = top_solute_flux(C, C_top, phi, D, v, dz)
 % Positive downward. Convert to umol/cm2/yr.
@@ -1709,6 +1716,7 @@ function [Rates, Diag] = RTM_Reaction_Rates(State, Grid, Forcing, Params, Config
 % should be handled outside this function in RTM_PDE_RHS.m.
 % ---------- vector safety ----------
 z   = Grid.z(:);
+dz  = Grid.dz;
 phi = Grid.poros(:);
 ks  = Grid.k_sed(:);
 n   = numel(z);
@@ -1784,7 +1792,7 @@ RC_after_O2 = max(RC_uM - R_respi, 0);
 Fe_gate = FeOOH ./ max(FeOOH + KFEMonod, 1e-12);
 C_to_Fe_pot = RC_after_O2 .* Fe_gate;
 R_FeRed_pot = 4 .* C_to_Fe_pot;  % umol Fe / L / yr
-I_FeRed_pot = trapz(z, R_FeRed_pot) .* 1e-3;  % umol Fe / cm2 / yr
+I_FeRed_pot = sum(R_FeRed_pot(:)) .* dz .* 1e-3;  % umol Fe / cm2 / yr
 I_Fe_supply_ext = F_FeOx .* 36.5;             % mmol/m2/d -> umol/cm2/yr
 Fe_supply_scale = min(1, I_Fe_supply_ext ./ max(I_FeRed_pot, 1e-12));
 R_FeRed = R_FeRed_pot .* Fe_supply_scale;
@@ -1930,15 +1938,14 @@ Diag.Fe_supply_scale = Fe_supply_scale;
 Diag.I_FeRed_pot = I_FeRed_pot;
 Diag.I_Fe_supply_ext = I_Fe_supply_ext;
 Diag.O2_secondary_sink = O2_secondary_sink;
-Diag.I_RC = trapz(z, RC_uM) .* 1e-3;
-Diag.I_respi = trapz(z, R_respi) .* 1e-3;
-Diag.I_FeRed_C = trapz(z, R_FeRed ./ 4) .* 1e-3;
-Diag.I_SRR = trapz(z, R_SRR) .* 1e-3;
-Diag.I_AOM = trapz(z, R_AOM) .* 1e-3;
-Diag.I_Meth = trapz(z, R_Meth) .* 1e-3;
-dz = mean(diff(z));
+Diag.I_RC = sum(RC_uM(:)) .* dz .* 1e-3;
+Diag.I_respi = sum(R_respi(:)) .* dz .* 1e-3;
+Diag.I_FeRed_C = sum(R_FeRed(:) ./ 4) .* dz .* 1e-3;
+Diag.I_SRR = sum(R_SRR(:)) .* dz .* 1e-3;
+Diag.I_AOM = sum(R_AOM(:)) .* dz .* 1e-3;
+Diag.I_Meth = sum(R_Meth(:)) .* dz .* 1e-3;
 Diag.I_Bubble = sum(R_Bubble(:)) .* dz .* 1e-3;
-Diag.I_CaCO3_net = trapz(z, R_carb_net_uM) .* 1e-3;
+Diag.I_CaCO3_net = sum(R_carb_net_uM(:)) .* dz .* 1e-3;
 end
 % ========================================================================
 % Local helpers.
@@ -3149,18 +3156,20 @@ toc
 
 ## File: Run_RTM_1D_PDE.m
 ```matlab
-function Result = Run_RTM_1D_PDE()
+function Result = Run_RTM_1D_PDE(Config, Params, do_plot)
 % RUN_RTM_1D_PDE
 % First coupled FV-MOL transient RTM driver.
 %
-% Purpose:
-%   1. Run constant-forcing spin-up.
-%   2. Test coupled RHS stability.
-%   3. Generate profiles comparable to the stable ODE steady-state model.
-clearvars -except Result
 tic
-Params = Params_Static();
-Config = Config_Baseline();
+if nargin < 1 || isempty(Config)
+    Config = Config_Baseline();
+end
+if nargin < 2 || isempty(Params)
+    Params = Params_Static();
+end
+if nargin < 3 || isempty(do_plot)
+    do_plot = true;
+end
 % First PDE benchmark settings.
 if ~isfield(Config, 't_spinup')
     Config.t_spinup = 300;  % yr
@@ -3197,8 +3206,11 @@ Result.State_final = State_final;
 Result.Rates_final = Rates_final;
 Result.Diag_final = Diag_final;
 Result.Summary = Summarize_PDE_Result(Result);
-Result.Budget = RTM_Budget(Result);
-Plot_PDE_Result(Result);
+% Result.Budget = RTM_Budget(Result);
+% Result.Validation = RTM_Validation_Metrics(Result);
+if do_plot
+    Plot_PDE_Result(Result);
+end
 toc
 end
 function State = floor_output_state(State)
@@ -3616,13 +3628,8 @@ Summary.Fe2_bottom = S.Fe2(end);
 Summary.HS_max = max(S.HS);
 Summary.CH4_max = max(S.CH4);
 Summary.CH4_bottom = S.CH4(end);
-if isfield(D, 'CH4_bubble_threshold_top')
-    Summary.CH4_bubble_threshold_top = D.CH4_bubble_threshold_top;
-    Summary.CH4_bubble_threshold_bottom = D.CH4_bubble_threshold_bottom;
-else
-    Summary.CH4_bubble_threshold_top = NaN;
-    Summary.CH4_bubble_threshold_bottom = NaN;
-end
+Summary.CH4_bubble_threshold_top = D.CH4_bubble_threshold_top;
+Summary.CH4_bubble_threshold_bottom = D.CH4_bubble_threshold_bottom;
 Summary.FeOOH_top = S.FeOOH(1);
 Summary.FeOOH_max = max(S.FeOOH);
 Summary.FeOOH_bottom = S.FeOOH(end);
@@ -3642,11 +3649,7 @@ Summary.I_FeRed_C = D.I_FeRed_C;
 Summary.I_SRR = D.I_SRR;
 Summary.I_AOM = D.I_AOM;
 Summary.I_Meth = D.I_Meth;
-if isfield(D, 'I_Bubble')
-    Summary.I_Bubble = D.I_Bubble;
-else
-    Summary.I_Bubble = 0;
-end
+Summary.I_Bubble = D.I_Bubble;
 Summary.redox_closure = ...
     (D.I_respi + D.I_FeRed_C + 2 .* D.I_SRR + 2 .* D.I_Meth) ./ ...
     max(D.I_RC, 1e-12);
@@ -3830,5 +3833,514 @@ title('Sensitivity of Bottom pH');
 xline(0, 'k--', 'LineWidth', 1.5);
 grid on;
 sgtitle(sprintf('Range-Scaled Sensitivity (+%.0f%% of Physical Bound)', range_fraction*100), 'FontWeight', 'bold');
+```
+
+## File: Validation_Case.m
+```matlab
+function [Config, Params, Case] = Validation_Case(name)
+Config = Config_Baseline();
+Params = Params_Static();
+Case = struct();
+Case.name = name;
+switch lower(name)
+    case 'geneva_1'
+        Case.note = 'Lake Geneva site #1, Rhone delta. Methane-rich delta sediment.';
+        Config.Lbottom = 21;
+        Config.T_future = 4;
+        Config.Salinity = 0.2;
+        Config.O2init = 125;
+        Config.SO4init = 500;
+        Config.CH4init = 0;
+        Config.DICinit = 2500;
+        Config.HCO3init = 3000;     % ALK, not HCO3
+        Config.F_OM_total = 131.7 * 1e-4;
+        Config.f_lab = 0.8;
+        Config.Calcium = 2000;
+        Config.Feinit = 0;
+        Config.HSinit = 0;
+        Config.vbottom = 2.3;
+        Config.porostop = 0.57;
+        Config.porosbottom = 0.55;
+        Config.porosscale = 5;
+        Config.Bioturbtop = 0.22;
+        Config.Bioturbbottom = 0.05;
+        Config.bioturbscale = 3;
+        Config.Bioirrig_top = 2;
+        Config.Bioirrig_bottom = 0;
+        Config.Bioirrig_scale = 1;
+        Config.F_OM_total = 131.7 * 1e-4;
+        Config.k_sed_scale = 2;
+        Config.f_lab = 0.8;
+        Config.F_FeOx = 0.1;
+        Config.F_CaCO3 = 0;
+        Config.water_depth_m = 130;
+        Config.use_CH4_bubbling = true;
+        Params.DO2 = 357;
+        Params.DSO4 = 164;
+        Params.DHCO3 = 161;
+        Params.DCa = Params.DHCO3;
+        Params.DCH4 = 274;
+    case 'geneva_1_fe'
+        [Config, Params, Case] = Validation_Case('geneva_1');
+        Case.name = name;
+        Config.F_FeOx = 0.5;
+        Params.KFEMonod = 50;
+    case 'geneva_1_trend'
+        [Config, Params, Case] = Validation_Case('geneva_1');
+        Case.name = name;
+        Case.note = 'Lake Geneva site #1, stronger mineralization trend test.';
+        Config.F_OM_total = 2.0 * 131.7 * 1e-4;
+        Config.f_lab = 0.8;
+        Config.Bioirrig_top = 0.5;
+        Config.Bioturbtop = 0.05;
+        Config.n = 101;
+        Config.n_pde = Config.n;
+        Config.t_spinup = 150;
+        Config.dt_out_spinup = 5;
+    case 'geneva_1_fe_strong'
+        [Config, Params, Case] = Validation_Case('geneva_1_trend');
+        Case.name = name;
+        Case.note = 'Lake Geneva site #1, stronger Fe availability test.';
+        Config.F_FeOx = 10;
+        Params.KFEMonod = 20;
+     case 'geneva_1_final'
+        [Config, Params, Case] = Validation_Case('geneva_1');
+        Case.name = name;
+        Case.note = 'Lake Geneva site 1 trend case: delta, high OC accumulation, anaerobic-dominated.';
+        Config.k_sed_scale = 2.5;
+        Config.f_lab = 0.65;
+        Config.Bioirrig_top = 2;
+        Config.Bioirrig_scale = 1.5;
+        Params.DSO4 = 150;
+        Params.k_SO4 = 15;
+        Params.Fe_inventory_factor = 0.075;
+        Params.KFEMonod = 100;
+        Params.kFeS = 8;
+    case 'geneva_2_proxy'
+        [Config, Params, Case] = Validation_Case('geneva_1_final');
+        Case.name = name;
+        Case.note = 'Lake Geneva site 2 proxy based on site 1 delta parameter family.';
+        Config.water_depth_m = 90;
+        Config.Lbottom = 44;
+        Config.vbottom = 2.3;
+        Config.porostop = 0.53;
+        Config.porosbottom = 0.51;
+        Config.F_OM_total = 129.8 * 1e-4;
+    case 'geneva_5_proxy'
+        [Config, Params, Case] = Validation_Case('geneva_4_final');
+        Case.name = name;
+        Case.note = 'Lake Geneva site 5 proxy based on site 4 profundal parameter family.';
+        Config.water_depth_m = 240;
+        Config.Lbottom = 30;
+        Config.vbottom = 0.4;
+        Config.porostop = 0.77;
+        Config.porosbottom = 0.74;
+        Config.F_OM_total = 19.8 * 1e-4;
+    case 'geneva_4'
+        Case.note = 'Lake Geneva site #4, profundal sediment. Lower OC accumulation than delta sites.';
+        Config.Lbottom = 27;
+        Config.T_future = 4;
+        Config.Salinity = 0.2;
+        Config.O2init = 125;
+        Config.SO4init = 500;
+        Config.CH4init = 0;
+        Config.DICinit = 1500;
+        Config.HCO3init = 2500;
+        Config.Calcium = 2000;
+        Config.Feinit = 0;
+        Config.HSinit = 0;
+        Config.vbottom = 0.5;
+        Config.porostop = 0.75;
+        Config.porosbottom = 0.72;
+        Config.porosscale = 5;
+        Config.Bioturbtop = 1;
+        Config.Bioturbbottom = 0.05;
+        Config.bioturbscale = 3;
+        Config.Bioirrig_top = 10;
+        Config.Bioirrig_bottom = 0;
+        Config.Bioirrig_scale = 1;
+        Config.F_OM_total = 31.2 * 1e-4;
+        Config.k_sed_scale = 10;
+        Config.f_lab = 0.8;
+        Config.F_FeOx = 0.1;
+        Config.F_CaCO3 = 0;
+        Config.water_depth_m = 210;
+        Config.use_CH4_bubbling = true;
+        Params.DO2 = 357;
+        Params.DSO4 = 164;
+        Params.DHCO3 = 161;
+        Params.DCa = Params.DHCO3;
+        Params.DCH4 = 274;
+%         Params.KFEMonod = 200;
+    case 'geneva_4_final'
+        [Config, Params, Case] = Validation_Case('geneva_4');
+        Case.name = name;
+        Case.note = 'Lake Geneva site 4 trend case: profundal, lower OC accumulation, more aerobic than delta sites.';
+        Config.k_sed_scale = 6;
+        Config.f_lab = 0.80;
+        Config.Bioirrig_top = 8;
+        Config.Bioirrig_scale = 2;
+        Params.DSO4 = 180;
+        Params.k_SO4 = 15;
+        Params.Fe_inventory_factor = 0.075;
+        Params.KFEMonod = 100;
+        Params.kFeS = 8;
+    case 'michigan'
+        Case.note = 'Lake Michigan. Redox partition and low methane validation case.';
+        Config.Lbottom = 18;
+        Config.T_future = 4.1;
+        Config.Salinity = 0;
+        Config.O2init = 315;
+        Config.SO4init = 180;
+        Config.CH4init = 0;
+        Config.DICinit = 2500;
+        Config.HCO3init = 2500;
+        Config.Calcium = 1200;
+        Config.Feinit = 7;
+        Config.HSinit = 0;
+        Config.vbottom = 0.08;
+        Config.porostop = 0.92;
+        Config.porosbottom = 0.87;
+        Config.porosscale = 10;
+        Config.Bioturbtop = 6.2;
+        Config.Bioturbbottom = 0.37;
+        Config.bioturbscale = 5;
+        Config.Bioirrig_top = 20;
+        Config.Bioirrig_bottom = 0;
+        Config.Bioirrig_scale = 2;
+        Config.F_OM_total = 8.6 * 365 * 12e-3 * 1e-4;
+        Config.k_sed_scale = 10;
+        Config.f_lab = 0.8;
+        Config.F_FeOx = 1.5;
+        Config.F_CaCO3 = 0.5;
+        Config.water_depth_m = 101;
+        Config.use_CH4_bubbling = true;
+        Params.rho = 2.45;
+        Params.k_SO4 = 30;
+        Params.Fe_inventory_factor = 0.12;
+%     case 'michigan_v2'
+%         [Config, Params, Case] = Validation_Case('michigan');
+%         Case.name = name;
+%         Case.note = 'Lake Michigan, lower OM inventory and stronger sulfate supply.';
+%
+%         Config.F_OM_total = 0.0007;
+%         Config.k_sed_scale = 8;
+%         Config.f_lab = 0.7;
+%
+%         Params.DSO4 = 300;
+% %         Params.KFEMonod = 3000;
+%     case 'michigan_v3'
+%         [Config, Params, Case] = Validation_Case('michigan');
+%         Case.name = name;
+%         Case.note = 'Lake Michigan, lower OM inventory with stronger reactivity.';
+%
+%         Config.F_OM_total = 0.0007;
+%         Config.k_sed_scale = 50;
+%         Config.f_lab = 0.75;
+%
+%         Params.DSO4 = 150;
+%         Params.Fe_inventory_factor = 0.08;
+%         Params.kFeS = 3;
+%     case 'michigan_v4'
+%         [Config, Params, Case] = Validation_Case('michigan');
+%         Case.name = name;
+%         Case.note = 'Lake Michigan, low OM stock with stronger turnover and shallower O2.';
+%
+%         Config.F_OM_total = 0.0007;
+%         Config.k_sed_scale = 180;
+%         Config.f_lab = 0.75;
+%
+%         Config.Bioirrig_top = 5;
+%         Config.Bioirrig_scale = 1.5;
+%
+%         Params.DO2 = 120;
+%         Params.DSO4 = 150;
+%
+%         Params.Fe_inventory_factor = 0.07;
+%         Params.kFeS = 4;
+    case 'michigan_v5'
+        [Config, Params, Case] = Validation_Case('michigan');
+        Case.name = name;
+        Case.note = 'Lake Michigan, stronger anoxic demand with low OM stock.';
+        Config.F_OM_total = 0.0012;
+        Config.k_sed_scale = 80;
+        Config.f_lab = 0.75;
+        Config.Bioirrig_top = 2;
+        Config.Bioirrig_scale = 1.5;
+        Params.DO2 = 80;
+        Params.DSO4 = 150;
+        Params.Fe_inventory_factor = 0.07;
+        Params.KFEMonod = 100;
+        Params.kFeS = 5;
+    %  case 'michigan_v6'
+    %     [Config, Params, Case] = Validation_Case('michigan_v5');
+    %     Case.name = name;
+    %     Case.note = 'Lake Michigan, higher FeOOH pool with similar Fe gate.';
+    %
+    %     Params.DSO4 = 120;
+    %     Params.KFEMonod = 700;
+    %
+    %     Params.Fe_inventory_factor = 0.45;
+    %     Params.kFeS = 8;
+    %
+    % case 'michigan_v7'
+    %     [Config, Params, Case] = Validation_Case('michigan_v5');
+    %     Case.name = name;
+    %     Case.note = 'Lake Michigan, moderate FeOOH pool.';
+    %
+    %     Params.DSO4 = 180;
+    %     Params.KFEMonod = 1000;
+    %     Params.Fe_inventory_factor = 0.15;
+    %     Params.kFeS = 12;
+    %
+    % case 'michigan_fe_shape'
+    %     [Config, Params, Case] = Validation_Case('michigan_v7');
+    %     Case.name = name;
+    %
+    %     % Params.kFeOx = 50;
+    %     Params.kFeS = 20;
+    %
+    %     case 'michigan_v5b'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    % Case.note = 'Lake Michigan v5 with slightly higher FeOOH and stronger FeS sink.';
+    %
+    % Params.Fe_inventory_factor = 0.09;
+    % Params.KFEMonod = 200;
+    % Params.kFeS = 8;
+    %
+    % case 'michigan_v5c'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    % Case.note = 'Lake Michigan v5 with stronger FeS sink.';
+    %
+    % Params.Fe_inventory_factor = 0.06;
+    % Params.KFEMonod = 200;
+    % Params.kFeS = 20;
+    % Config.Bioirrig_top = 2;
+    % Config.Bioirrig_scale = 3;
+    %
+    % case 'michigan_v5_shape2'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    %
+    % Config.Bioirrig_top = 2;
+    % Config.Bioirrig_scale = 3;
+    %
+    % Params.DSO4 = 120;
+    % case 'michigan_v5_shape1'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    %
+    % Params.k_SO4 = 15;
+    % Params.kFeS = 8;
+    case 'michigan_final'
+        [Config, Params, Case] = Validation_Case('michigan_v5');
+        Case.name = name;
+        Case.note = 'Lake Michigan v5 with stronger mid-depth FeS sink and slightly higher FeOOH.';
+        Params.k_SO4 = 10;
+        Params.DSO4 = 150;
+        Params.kFeS = 8;
+        Params.Fe_inventory_factor = 0.075;
+        Params.KFEMonod = 100;
+    case 'georgia_stl2_trial'
+        Case.name = name;
+        Case.note = 'Georgia STL2 trial: estuarine creek-bank, sulfate-dominated, high-metabolism site.';
+        Config.Lbottom = 50;
+        Config.T_future = 25;
+        Config.Salinity = 25;
+        Config.O2init = 200;
+        Config.SO4init = 22000;
+        Config.CH4init = 0;
+        Config.DICinit = 2500;
+        Config.HCO3init = 2500;
+        Config.Calcium = 9000;
+        Config.Feinit = 0;
+        Config.HSinit = 0;
+        Config.vbottom = 0.10;
+        Config.porostop = 0.88;
+        Config.porosbottom = 0.75;
+        Config.porosscale = 10;
+        Config.Bioturbtop = 1;
+        Config.Bioturbbottom = 0.05;
+        Config.bioturbscale = 3;
+        Config.Bioirrig_top = 1;
+        Config.Bioirrig_bottom = 0;
+        Config.Bioirrig_scale = 3;
+        Config.F_OM_total = 0.003;
+        Config.k_sed_scale = 30;
+        Config.f_lab = 0.75;
+        Config.F_FeOx = 1.0;
+        Config.F_CaCO3 = 0;
+        Config.water_depth_m = 1;
+        Config.use_CH4_bubbling = true;
+        Params.DO2 = 200;
+        Params.DSO4 = 120;
+        Params.DH2S = 300;
+        Params.DCH4 = 300;
+        Params.DHCO3 = 250;
+        Params.DCa = Params.DHCO3;
+        Params.k_SO4 = 100;
+        Params.K_CH4_SO4 = 500;
+        Params.k_AOM = 3;
+        Params.Fe_inventory_factor = 0.10;
+        Params.KFEMonod = 100;
+        Params.kFeS = 5;
+        Config.k_sed_scale = 50;
+    case 'georgia_stl2_v2'
+        Case.name = name;
+        Case.note = 'Georgia STL2 trial: high-turnover estuarine creek-bank sediment, sulfate-dominated.';
+        Config.Lbottom = 50;
+        Config.T_future = 25;
+        Config.Salinity = 20;
+        Config.O2init = 180;
+        Config.SO4init = 22000;
+        Config.CH4init = 0;
+        Config.DICinit = 4000;
+        Config.HCO3init = 3000;
+        Config.Calcium = 8000;
+        Config.Feinit = 0;
+        Config.HSinit = 0;
+        Config.vbottom = 0.10;
+        Config.porostop = 0.88;
+        Config.porosbottom = 0.75;
+        Config.porosscale = 10;
+        Config.Bioturbtop = 0.5;
+        Config.Bioturbbottom = 0.02;
+        Config.bioturbscale = 3;
+        Config.Bioirrig_top = 0.2;
+        Config.Bioirrig_bottom = 0;
+        Config.Bioirrig_scale = 5;
+        Config.F_OM_total = 0.006;
+        Config.k_sed_scale = 200;
+        Config.f_lab = 0.85;
+        Config.F_FeOx = 5.0;
+        Config.F_CaCO3 = 0;
+        Config.water_depth_m = 0.5;
+        Config.use_CH4_bubbling = true;
+        Params.DO2 = 120;
+        Params.DSO4 = 40;
+        Params.DH2S = 150;
+        Params.DCH4 = 200;
+        Params.DHCO3 = 180;
+        Params.DCa = Params.DHCO3;
+        Params.k_SO4 = 50;
+        Params.K_CH4_SO4 = 300;
+        Params.k_AOM = 5;
+        Params.Fe_inventory_factor = 0.5;
+        Params.KFEMonod = 80;
+        Params.kFeS = 20;
+        Params.kFeOx = 5;
+    case 'georgia_stl2_v3'
+        Case.name = name;
+        Case.note = 'Georgia STL2 trial: distributed sulfate reduction and shallow Fe2+ peak.';
+        Config.Lbottom = 50;
+        Config.T_future = 25;
+        Config.Salinity = 20;
+        Config.O2init = 180;
+        Config.SO4init = 22000;
+        Config.CH4init = 0;
+        Config.DICinit = 3500;
+        Config.HCO3init = 4200;
+        Config.Calcium = 8000;
+        Config.Feinit = 0;
+        Config.HSinit = 0;
+        Config.vbottom = 0.35;
+        Config.porostop = 0.88;
+        Config.porosbottom = 0.75;
+        Config.porosscale = 10;
+        Config.Bioturbtop = 0.5;
+        Config.Bioturbbottom = 0.02;
+        Config.bioturbscale = 4;
+        Config.Bioirrig_top = 0.8;
+        Config.Bioirrig_bottom = 0;
+        Config.Bioirrig_scale = 4;
+        Config.F_OM_total = 0.020;
+        Config.k_sed_scale = 40;
+        Config.f_lab = 0.45;
+        Config.F_FeOx = 15.0;
+        Config.F_CaCO3 = 0;
+        Config.water_depth_m = 0.5;
+        Config.use_CH4_bubbling = true;
+        Params.DO2 = 120;
+        Params.DSO4 = 80;
+        Params.DH2S = 180;
+        Params.DCH4 = 200;
+        Params.DHCO3 = 180;
+        Params.DCa = Params.DHCO3;
+        Params.k_SO4 = 60;
+        Params.K_CH4_SO4 = 300;
+        Params.k_AOM = 5;
+        Params.Fe_inventory_factor = 1.0;
+        Params.KFEMonod = 150;
+        Params.kFeS = 10;
+        Params.kFeOx = 5;
+    case 'georgia_stl2_trial2'
+        [Config, Params, Case] = Validation_Case('georgia_stl2_trial');
+        Case.name = name;
+        Case.note = 'Georgia STL2 adjusted from trial: lower sulfate boundary, broader sulfate reduction, delayed Fe2+ peak.';
+        % Boundary conditions
+        Config.SO4init = 22000;
+        % Keep trial-like pH structure
+        Config.DICinit = 2500;
+        Config.HCO3init = 2500;
+        Config.Calcium = 9000;
+        % Broaden OM degradation without creating huge OM stock
+        Config.vbottom = 0.25;
+        Config.F_OM_total = 0.006;
+        Config.k_sed_scale = 45;
+        Config.f_lab = 0.55;
+        % Slightly stronger shallow exchange to delay Fe2+ buildup
+        Config.Bioirrig_top = 2.0;
+        Config.Bioirrig_scale = 2.5;
+        % Sulfate transport: lower than trial, not as low as v2
+        Params.DSO4 = 80;
+        Params.k_SO4 = 100;
+        % Fe source: stronger than trial, weaker than v3
+        Config.F_FeOx = 6.0;
+        Params.Fe_inventory_factor = 0.6;
+        Params.KFEMonod = 150;
+        % Fe sink: moderate, not too strong
+        Params.kFeS = 8;
+        Params.kFeOx = 5;
+    case 'georgia_stl2_trial3'
+        [Config, Params, Case] = Validation_Case('georgia_stl2_trial');
+        Case.name = name;
+        Case.note = 'Georgia STL2: broader sulfate reduction with delayed Fe2+ peak.';
+        Config.SO4init = 22000;
+        % keep trial-like carbonate condition
+        Config.DICinit = 2500;
+        Config.HCO3init = 2500;
+        Config.Calcium = 9000;
+        % spread OM degradation deeper
+        Config.F_OM_total = 0.008;
+        Config.k_sed_scale = 20;
+        Config.f_lab = 0.30;
+        Config.vbottom = 0.25;
+        % mild shallow exchange to delay Fe2+ peak, not too strong
+        Config.Bioirrig_top = 1.5;
+        Config.Bioirrig_scale = 3.5;
+        % sulfate transport
+        Params.DSO4 = 60;
+        Params.k_SO4 = 80;
+        % Fe source: stronger than trial, weaker/less top-heavy than v3
+        Config.F_FeOx = 6.0;
+        Params.Fe_inventory_factor = 0.6;
+        Params.KFEMonod = 250;
+        Params.kFeS = 8;
+        Params.kFeOx = 5;
+    case 'georgia_stl2_trial4'
+    [Config, Params, Case] = Validation_Case('georgia_stl2_trial3');
+    Case.name = name;
+    Case.note = 'Georgia STL2: preserve delayed Fe2+ peak, strengthen mid-depth Fe sink and pH recovery.';
+    Params.KFEMonod = 700;
+    Params.kFeS = 20;
+    Params.k_SO4 = 40;
+    Config.DICinit = 2700;
+    Config.HCO3init = 2600;
+    otherwise
+        error('Unknown validation case: %s', name);
+end
+end
 ```
 

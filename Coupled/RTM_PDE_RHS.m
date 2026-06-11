@@ -62,7 +62,7 @@ dYdt = Pack_State(dState);
 end
 
 % ========================================================================
-% Local finite-volume helpers.
+% Local finite-volume functions.
 % ========================================================================
 
 function dCdt = solute_rhs(C, Grid, D, R, C_top)

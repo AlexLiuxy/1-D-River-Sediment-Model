@@ -61,7 +61,7 @@ Result.Rates_final = Rates_final;
 Result.Diag_final = Diag_final;
 
 Result.Summary = Summarize_PDE_Result(Result);
-Result.Budget = RTM_Budget(Result);
+% Result.Budget = RTM_Budget(Result);
 % Result.Validation = RTM_Validation_Metrics(Result);
 
 if do_plot
