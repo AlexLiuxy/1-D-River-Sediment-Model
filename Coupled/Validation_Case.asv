@@ -388,6 +388,47 @@ switch lower(name)
         Params.rho = 2.45;
         Params.k_SO4 = 30;
         Params.Fe_inventory_factor = 0.12;
+
+%     case 'michigan_v2'
+%         [Config, Params, Case] = Validation_Case('michigan');
+%         Case.name = name;
+%         Case.note = 'Lake Michigan, lower OM inventory and stronger sulfate supply.';
+% 
+%         Config.F_OM_total = 0.0007;
+%         Config.k_sed_scale = 8;
+%         Config.f_lab = 0.7;
+% 
+%         Params.DSO4 = 300;
+% %         Params.KFEMonod = 3000;
+%     case 'michigan_v3'
+%         [Config, Params, Case] = Validation_Case('michigan');
+%         Case.name = name;
+%         Case.note = 'Lake Michigan, lower OM inventory with stronger reactivity.';
+% 
+%         Config.F_OM_total = 0.0007;
+%         Config.k_sed_scale = 50;
+%         Config.f_lab = 0.75;
+% 
+%         Params.DSO4 = 150;
+%         Params.Fe_inventory_factor = 0.08;
+%         Params.kFeS = 3;
+%     case 'michigan_v4'
+%         [Config, Params, Case] = Validation_Case('michigan');
+%         Case.name = name;
+%         Case.note = 'Lake Michigan, low OM stock with stronger turnover and shallower O2.';
+% 
+%         Config.F_OM_total = 0.0007;
+%         Config.k_sed_scale = 180;
+%         Config.f_lab = 0.75;
+% 
+%         Config.Bioirrig_top = 5;
+%         Config.Bioirrig_scale = 1.5;
+% 
+%         Params.DO2 = 120;
+%         Params.DSO4 = 150;
+% 
+%         Params.Fe_inventory_factor = 0.07;
+%         Params.kFeS = 4;
     
     case 'michigan_v5'
         [Config, Params, Case] = Validation_Case('michigan');
@@ -408,7 +449,69 @@ switch lower(name)
         Params.KFEMonod = 100;
         Params.kFeS = 5; 
 
-   
+    %  case 'michigan_v6'
+    %     [Config, Params, Case] = Validation_Case('michigan_v5');
+    %     Case.name = name;
+    %     Case.note = 'Lake Michigan, higher FeOOH pool with similar Fe gate.';
+    % 
+    %     Params.DSO4 = 120;
+    %     Params.KFEMonod = 700;
+    % 
+    %     Params.Fe_inventory_factor = 0.45;
+    %     Params.kFeS = 8;      
+    % 
+    % case 'michigan_v7'
+    %     [Config, Params, Case] = Validation_Case('michigan_v5');
+    %     Case.name = name;
+    %     Case.note = 'Lake Michigan, moderate FeOOH pool.';
+    % 
+    %     Params.DSO4 = 180;
+    %     Params.KFEMonod = 1000;
+    %     Params.Fe_inventory_factor = 0.15;
+    %     Params.kFeS = 12;
+    % 
+    % case 'michigan_fe_shape'
+    %     [Config, Params, Case] = Validation_Case('michigan_v7');
+    %     Case.name = name;
+    % 
+    %     % Params.kFeOx = 50;
+    %     Params.kFeS = 20;
+    % 
+    %     case 'michigan_v5b'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    % Case.note = 'Lake Michigan v5 with slightly higher FeOOH and stronger FeS sink.';
+    % 
+    % Params.Fe_inventory_factor = 0.09;
+    % Params.KFEMonod = 200;
+    % Params.kFeS = 8;
+    % 
+    % case 'michigan_v5c'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    % Case.note = 'Lake Michigan v5 with stronger FeS sink.';
+    % 
+    % Params.Fe_inventory_factor = 0.06;
+    % Params.KFEMonod = 200;
+    % Params.kFeS = 20;
+    % Config.Bioirrig_top = 2;
+    % Config.Bioirrig_scale = 3;
+    % 
+    % case 'michigan_v5_shape2'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    % 
+    % Config.Bioirrig_top = 2;
+    % Config.Bioirrig_scale = 3;
+    % 
+    % Params.DSO4 = 120;
+    % case 'michigan_v5_shape1'
+    % [Config, Params, Case] = Validation_Case('michigan_v5');
+    % Case.name = name;
+    % 
+    % Params.k_SO4 = 15;
+    % Params.kFeS = 8;
+
     case 'michigan_final'
         [Config, Params, Case] = Validation_Case('michigan_v5');
         Case.name = name;
@@ -850,239 +953,123 @@ switch lower(name)
     Config.use_CH4_bubbling = false;
     Config.plot_validation_obs = true;
 
-    case 'georgia_stl2_final1'
-    [Config, Params, Case] = Validation_Case('georgia_stl2_final');
-    Case.name = name;
-    Case.note = 'Georgia STL2: prioritize SO4, CH4, and H2S; DIC/pH soft constraints.';
-
-    Config.Lbottom = 45;
-
-    % Keep original carbon/DIC structure.
-    % Do not force DIC to 50-60 mM in this validation step.
-    % Config.F_OM_total unchanged
-    % Config.k_sed_scale unchanged
-    % Config.f_lab unchanged
-    % Params.DHCO3 unchanged
-    % Config.HCO3init unchanged
-
-    % SO4: only mild change. Avoid whole-profile right shift.
-    % If original front was too shallow, use a very small increase only.
-    Params.DSO4 = Params.DSO4 * 1.05;
-
-    % Do not increase bioirrigation. It tends to replenish SO4 everywhere.
-    % Config.Bioirrig_top unchanged
-    % Config.Bioirrig_scale unchanged
-
-    % H2S: retain sulfide rather than forcing much stronger SRR.
-    if isfield(Params, 'DH2S')
-        Params.DH2S = Params.DH2S * 0.70;
-    end
-
-    % Slightly increase sulfate reduction only if needed.
-    % Keep this small to avoid making SO4 front too shallow.
-    Params.k_SO4 = Params.k_SO4 * 1.05;
-
-    % CH4: retain CH4 and reduce excessive AOM removal.
-    Params.DCH4 = Params.DCH4 * 0.70;
-
-    if isfield(Params, 'k_AOM')
-        Params.k_AOM = Params.k_AOM * 0.80;
-    end
-
-    % Keep Fe low as observed.
-    % Do not increase Fe source.
-    Config.use_CH4_bubbling = false;
-    Config.plot_validation_obs = true;
-
-    case 'georgia_stl2_final2'
-    [Config, Params, Case] = Validation_Case('georgia_stl2_final1');
-    Case.name = name;
-    Case.note = 'Georgia STL2: lower deep SO4 and recover CH4 while keeping H2S.';
-
-    % 1. Reduce sulfate resupply so SO4 can actually deplete at depth
-    Params.DSO4 = Params.DSO4 * 0.70;
-
-    % Do not increase bioirrigation
-    % If previous case changed Bioirrig, keep it at original STL2/SAP1-final value
-    % Config.Bioirrig_top = Config.Bioirrig_top;
-    % Config.Bioirrig_scale = Config.Bioirrig_scale;
-
-    % 2. Slightly enhance sulfate consumption, but only mildly
-    % This helps consume remaining SO4 and maintains H2S.
-    Params.k_SO4 = Params.k_SO4 * 1.10;
-
-    % 3. Allow CH4 to accumulate once SO4 is lower
-    Params.DCH4 = Params.DCH4 * 0.75;
-
-    if isfield(Params, 'k_AOM')
-        Params.k_AOM = Params.k_AOM * 0.75;
-    end
-
-    if isfield(Params, 'K_CH4_SO4')
-        Params.K_CH4_SO4 = Params.K_CH4_SO4 * 1.30;
-    end
-
-    % 4. Keep H2S retention from current good-H2S version
-    % Do not reduce DH2S further unless H2S drops again.
-
-    Config.use_CH4_bubbling = false;
-    Config.plot_validation_obs = true;
-
-    case 'georgia_stl2_final3'
-    [Config, Params, Case] = Validation_Case('georgia_stl2_final2');
-    Case.name = name;
-    Case.note = 'Georgia STL2: stronger SO4 depletion and CH4 recovery.';
-
-    % SO4 still too high: reduce sulfate resupply more strongly
-    Params.DSO4 = Params.DSO4 * 0.50;
-
-    % If bioirrigation is active, reduce it too.
-    % This is likely important if SO4 stays high even after DSO4 changes.
-    Config.Bioirrig_top = Config.Bioirrig_top * 0.50;
-    Config.Bioirrig_scale = Config.Bioirrig_scale * 0.70;
-
-    % Slightly increase sulfate consumption, but not too much
-    Params.k_SO4 = Params.k_SO4 * 1.15;
-
-    % Keep H2S retention from the current better-H2S version
-    % Do not change DH2S unless H2S drops too much
-
-    % CH4 retention/removal was already tested; keep it moderately favorable
-    Params.DCH4 = Params.DCH4 * 0.75;
-
-    if isfield(Params, 'k_AOM')
-        Params.k_AOM = Params.k_AOM * 0.75;
-    end
-
-    if isfield(Params, 'K_CH4_SO4')
-        Params.K_CH4_SO4 = Params.K_CH4_SO4 * 1.5;
-    end
-
-    Config.use_CH4_bubbling = false;
-    Config.plot_validation_obs = true;
-
     case 'michigan_poc'
-        [Config, Params, Case] = Validation_Case('michigan_final');
-        Case.name = name;
-        Case.note = 'Michigan higher OC inventory test with lower reactivity.';
-    
-        % Increase OC inventory
-        Config.F_OM_total = Config.F_OM_total * 1.6;
-    
-        % Reduce labile fraction so higher OC does not all become reactive
-        Config.f_lab = Config.f_lab * 0.5;
-    
-        % If your k_sed_scale acts as a mineralization-rate multiplier,
-        % reduce it slightly. If in your code it means something else,
-        % do not apply this blindly.
-        Config.k_sed_scale = Config.k_sed_scale * 0.7;
-    
-    
-        Config.plot_validation_obs = true;
-
-        case 'georgia_stl2_final4'
-[Config, Params, Case] = Validation_Case('georgia_sap1_final');
+    [Config, Params, Case] = Validation_Case('michigan_final');
     Case.name = name;
-    Case.note = 'Georgia STL2: allow weak Fe cycling while keeping sulfidic character.';
+    Case.note = 'Michigan higher OC inventory test with lower reactivity.';
 
-    Config.Lbottom = 45;
+    % Increase OC inventory
+    Config.F_OM_total = Config.F_OM_total * 1.6;
 
-    % Keep SAP1-final baseline
-    Config.F_OM_total = 0.04;
-    Config.k_sed_scale = 8;
-    Config.f_lab = 0.25;
-    Config.vbottom = 1;
+    % Reduce labile fraction so higher OC does not all become reactive
+    Config.f_lab = Config.f_lab * 0.5;
 
-    Config.Bioirrig_top = 0.05;
-    Config.Bioirrig_scale = 8;
+    % If your k_sed_scale acts as a mineralization-rate multiplier,
+    % reduce it slightly. If in your code it means something else,
+    % do not apply this blindly.
+    Config.k_sed_scale = Config.k_sed_scale * 0.7;
 
-    Params.DSO4 = 36;
-    Params.k_SO4 = 60;
 
-    Params.DH2S = 60;
-    Params.DCH4 = 130;
-    Params.DHCO3 = 130;
-    Params.DCa = Params.DHCO3;
+    Config.plot_validation_obs = true;
 
-    Params.K_CH4_SO4 = 500;
-    Params.k_AOM = 0.2;
+    case 'michigan_poc4'
+    [Config, Params, Case] = Validation_Case('michigan_final');
+    Case.name = name;
 
-    % Allow weak Fe cycling, but keep Fe2 low through FeS sink
-    Config.F_FeOx = 0.05;
-    Params.Fe_inventory_factor = 0.05;
-    Params.KFEMonod = 1000;
-    Params.kFeS = 60;
+    % Keep higher OC inventory, but do not over-react it
+    Config.F_OM_total = Config.F_OM_total * 1.8;
+    Config.f_lab = Config.f_lab * 0.65;
+    Config.k_sed_scale = Config.k_sed_scale * 0.80;
 
-    Config.use_CH4_bubbling = false;
+    % Preserve steeper POC gradient by reducing solid mixing
+    Config.Bioturbtop = Config.Bioturbtop * 0.50;
+    Config.Bioturbbottom = Config.Bioturbbottom * 0.50;
+
+    % Let SO4 penetrate a little deeper
+    Params.DSO4 = Params.DSO4 * 1.25;
+
+    % Restore Fe reduction enough to keep SO4 consumption slower
+    Config.F_FeOx = Config.F_FeOx * 0.95;
+    Params.Fe_inventory_factor = Params.Fe_inventory_factor * 0.90;
+    Params.KFEMonod = Params.KFEMonod * 1.15;
+
+    % Remove dissolved Fe2 without killing Fe reduction too much
+    Params.kFeS = Params.kFeS * 1.25;
+
+    Config.plot_validation_obs = true;
+
+    case 'michigan_poc5'
+    [Config, Params, Case] = Validation_Case('michigan_poc4');
+    Case.name = name;
+    Case.note = 'Michigan POC steeper decline and moderate Fe recovery.';
+
+    % POC: make the surface high but allow stronger depth decline
+    Config.F_OM_total = Config.F_OM_total / 1.8 * 2.2;
+    Config.f_lab = Config.f_lab / 0.65 * 0.85;
+    Config.k_sed_scale = Config.k_sed_scale / 0.80 * 1.00;
+
+    % Keep reduced bioturbation, or slightly reduce more if needed
+    Config.Bioturbtop = Config.Bioturbtop * 0.8;
+    Config.Bioturbbottom = Config.Bioturbbottom * 0.8;
+
+    % Keep SO4 improvement close to current
+    Params.DSO4 = Params.DSO4;
+
+    % Fe was over-suppressed: recover Fe without fully returning to high-Fe case
+    Config.F_FeOx = Config.F_FeOx / 0.95 * 1.00;
+    Params.Fe_inventory_factor = Params.Fe_inventory_factor / 0.90 * 1.00;
+    Params.KFEMonod = Params.KFEMonod / 1.15 * 1.05;
+
+    % Undo some FeS removal if current Fe is still too low
+    Params.kFeS = Params.kFeS / 1.25 * 1.05;
+
     Config.plot_validation_obs = true;
 
     case 'michigan_poc7'
-        [Config, Params, Case] = Validation_Case('michigan_poc');
-        Case.name = name;
-        Case.note = 'Michigan: keep high-Fe/SO4 regime, improve POC gradient and moderately reduce Fe.';
-    
-        % Keep the Fe/SO4 regime from michigan_poc.
-        % Do not change F_FeOx, Fe_inventory_factor, KFEMonod here.
-    
-        % Make POC decline slightly faster without changing Fe/SO4 too much.
-        Config.Bioturbtop = Config.Bioturbtop * 0.5;
-        Config.Bioturbbottom = Config.Bioturbbottom * 0.5;
-    
-        % If POC top becomes too low, restore a bit of input.
-        Config.F_OM_total = Config.F_OM_total * 1.10;
-    
-        % Fe in michigan_poc was too high; reduce dissolved Fe gently.
-        % Try only one Fe sink adjustment first.
-        Params.kFeS = Params.kFeS * 1.15;
-    
-        Config.plot_validation_obs = true;
+    [Config, Params, Case] = Validation_Case('michigan_poc');
+    Case.name = name;
+    Case.note = 'Michigan: keep high-Fe/SO4 regime, improve POC gradient and moderately reduce Fe.';
 
-    case 'michigan_poc8'
-        [Config, Params, Case] = Validation_Case('michigan_poc7'); 
-        Case.name = name;
-        Case.note = 'Michigan minor final adjustment: lower/steeper POC, deeper SO4 front, moderate Fe.';
-    
-        % POC: lower whole profile but make it slightly steeper
-        Config.F_OM_total = Config.F_OM_total * 0.85;
-        Config.f_lab = Config.f_lab * 1.15;
-        Config.k_sed_scale = Config.k_sed_scale * 1.10;
-    
-        % Preserve surface-to-depth gradient
-        Config.Bioturbtop = Config.Bioturbtop * 0.85;
-        Config.Bioturbbottom = Config.Bioturbbottom * 0.85;
-    
-        % SO4: allow slightly deeper penetration
-        Params.DSO4 = Params.DSO4 * 1.10;
-    
-        % Fe: do not suppress Fe reduction further.
-        % If current Fe is acceptable/high, leave Fe parameters unchanged first.
-        % If it is still too high after POC/SO4 change, use only mild sink:
-        % Params.kFeS = Params.kFeS * 1.05;
-    
-        Config.plot_validation_obs = true;
+    % Keep the Fe/SO4 regime from michigan_poc.
+    % Do not change F_FeOx, Fe_inventory_factor, KFEMonod here.
 
-    case 'michigan_poc9'
-        [Config, Params, Case] = Validation_Case('michigan_poc8');
-        Case.name = name;
-        Case.note = 'Michigan final small Fe-shape and SO4 adjustment.';
+    % Make POC decline slightly faster without changing Fe/SO4 too much.
+    Config.Bioturbtop = Config.Bioturbtop * 0.5;
+    Config.Bioturbbottom = Config.Bioturbbottom * 0.5;
+
+    % If POC top becomes too low, restore a bit of input.
+    Config.F_OM_total = Config.F_OM_total * 1.10;
+
+    % Fe in michigan_poc was too high; reduce dissolved Fe gently.
+    % Try only one Fe sink adjustment first.
+    Params.kFeS = Params.kFeS * 1.15;
+
+    Config.plot_validation_obs = true;
+
+    case 'michigan_poc_finaltest'
+    [Config, Params, Case] = Validation_Case('michigan_poc7'); 
+    Case.name = name;
+    Case.note = 'Michigan minor final adjustment: lower/steeper POC, deeper SO4 front, moderate Fe.';
+
+    % POC: lower whole profile but make it slightly steeper
+    Config.F_OM_total = Config.F_OM_total * 0.85;
+    Config.f_lab = Config.f_lab * 1.15;
+    Config.k_sed_scale = Config.k_sed_scale * 1.10;
+
+    % Preserve surface-to-depth gradient
+    Config.Bioturbtop = Config.Bioturbtop * 0.85;
+    Config.Bioturbbottom = Config.Bioturbbottom * 0.85;
+
+    % SO4: allow slightly deeper penetration
+    Params.DSO4 = Params.DSO4 * 1.10;
+
+    % Fe: do not suppress Fe reduction further.
+    % If current Fe is acceptable/high, leave Fe parameters unchanged first.
+    % If it is still too high after POC/SO4 change, use only mild sink:
+    % Params.kFeS = Params.kFeS * 1.05;
+
+    Config.plot_validation_obs = true;
     
-        % % Push Fe reduction slightly deeper / reduce shallow Fe2
-        % Params.KFEMonod = Params.KFEMonod * 1.10;
-    
-        Params.kFeS = Params.kFeS * 1.3;
-    
-        % Compensate possible faster SO4 consumption by slightly increasing diffusion
-        Params.DSO4 = Params.DSO4 * 1.05;
-    
-            % Mildly reduce reactive Fe pool if Fe2 is still too high
-        Params.Fe_inventory_factor = Params.Fe_inventory_factor * 0.85;
-    
-        % Do not change OM
-        % Do not change Fe inventory or Fe input
-        % Do not change kFeS yet
-    
-        Config.plot_validation_obs = true;
-        
     otherwise
         error('Unknown validation case: %s', name);
 end

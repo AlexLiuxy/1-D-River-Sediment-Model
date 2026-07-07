@@ -21,21 +21,12 @@ ylabel('Depth (cm)');
 grid on; box on
 
 subplot(m_plot,n_plot,2);
-plot(S.O2, z, 'LineWidth', 2); axis ij
-
-% z_bc = -0.5 * Grid.dz;
-% plot([Result.Forcing.O2_top; S.O2], [z_bc; z], 'LineWidth', 2);
-% hold on
-% plot(S.O2, z, 'LineWidth', 2);
-% axis ij
-
-% plot(S.O2, z, 'LineWidth', 2); hold on
-% 
-% scatter(Result.Forcing.O2_top, 0, 45, 'filled', ...
-%     'HandleVisibility', 'off');
-% 
-% axis ij
-
+% plot(S.O2, z, 'LineWidth', 2); axis ij
+z_bc = -0.5 * Grid.dz;
+plot([Result.Forcing.O2_top; S.O2], [z_bc; z], '--', 'LineWidth', 1.2);
+hold on
+plot(S.O2, z, 'LineWidth', 2);
+axis ij
 title('O_2 (\muM)');
 grid on; box on
 

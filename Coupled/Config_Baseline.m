@@ -3,7 +3,7 @@ function Config = Config_Baseline()
 % Baseline settings for the transient 1-D PDE core.
     
     Config.Corg_top = 0.02;    % g/gDw, i.e. 1.2 % dry weight at sediment surface
-    
+    Config.plot_validation_obs = false;
     % ---------------- Domain ----------------
     Config.Lbottom = 30;          % cm
     Config.n = 101;
@@ -27,6 +27,7 @@ function Config = Config_Baseline()
 
     Config.f_lab = 0.6;   % fraction of total OM input entering labile/reactive pool
     Config.k_ref_factor = 0;   % first test: k_ref = 0.03 * k_sed
+    Config.k_sed_scale = 2;
     % ---------------- Boundary concentrations ----------------
     Config.O2init   = 250;%150;        % uM
     Config.SO4init  = 200;%200;        % uM
